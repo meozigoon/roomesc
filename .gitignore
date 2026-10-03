@@ -1,0 +1,62 @@
+# .NET build outputs
+**/bin/
+**/obj/
+artifacts/
+dist/
+
+# Visual Studio and JetBrains user state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Test and coverage outputs
+TestResults/
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+# NuGet and local packages
+packages/
+*.nupkg
+*.snupkg
+
+# Local runtime data and backups
+player-data.json
+progress-backup.json
+*.bak
+*.tmp
+*.temp
+*.log
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+secrets.json
+appsettings.*.local.json
+*.pfx
+*.p12
+
+# Supabase local development state
+supabase/.branches/
+supabase/.temp/
+
+# Codex workspace attachments
+.codex-remote-attachments/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor swap and backup files
+*.swp
+*.swo
+*~
