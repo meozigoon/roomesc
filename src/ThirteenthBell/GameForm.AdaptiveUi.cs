@@ -264,9 +264,9 @@ internal sealed partial class GameForm
         (PuzzleId Puzzle, GameScreen Screen, string Hint)[] puzzles =
         [
             (PuzzleId.Lanterns, GameScreen.Lanterns, "별등 금고: 이웃한 숫자끼리 어떤 관계인지 비교해 보세요."),
-            (PuzzleId.Melody, GameScreen.Melody, "스노글로브 계산대: 같은 장식은 모든 줄에서 같은 값을 가집니다."),
+            (PuzzleId.Melody, GameScreen.Melody, "스노글로브 계산대: 두 식에서 같은 항을 없애면 장식 사이의 관계를 찾을 수 있습니다."),
             (PuzzleId.RibbonLoom, GameScreen.RibbonLoom, "양말 장치: 바로 이웃해야 하는 두 색을 한 묶음으로 생각해 보세요."),
-            (PuzzleId.LetterAcrostic, GameScreen.LetterAcrostic, "마리의 편지: 각 줄의 시작 부분에 주목해 보세요."),
+            (PuzzleId.LetterAcrostic, GameScreen.LetterAcrostic, "마리의 편지: 바늘땀 수는 글자를 고를 위치이고, 조각 번호는 고른 글자를 읽을 순서입니다."),
             (PuzzleId.ToyCipher, GameScreen.ToyCipher, "장난감 암호: 제목에 등장하는 종의 번호를 다시 읽어 보세요."),
             (PuzzleId.StarChart, GameScreen.StarChart, "별자리 도면: 기록에 적힌 걸음의 방향을 생각해 보세요.")
         ];
