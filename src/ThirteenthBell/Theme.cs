@@ -49,6 +49,14 @@ internal static class Theme
         return new Font(_fontFamily, size, resolvedStyle, GraphicsUnit.Point);
     }
 
+    public static Font ControlFont(Control control, float size, FontStyle style = FontStyle.Regular)
+    {
+        // Keep the equation's emoji glyphs when adaptive layout resizes its label.
+        return control.Name == "OrnamentEquationText"
+            ? new Font("Segoe UI Emoji", size, FontStyle.Regular, GraphicsUnit.Point)
+            : Font(size, style);
+    }
+
     public static void Shutdown()
     {
         _fontFamily?.Dispose();

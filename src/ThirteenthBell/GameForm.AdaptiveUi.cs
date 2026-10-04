@@ -64,7 +64,7 @@ internal sealed partial class GameForm
         if (control is AtmosphereCard card)
         {
             using Font title = Theme.Font(card.TitleLabel.Font.SizeInPoints * CompactFontScale, FontStyle.Bold);
-            using Font body = Theme.Font(card.BodyLabel.Font.SizeInPoints * CompactFontScale);
+            using Font body = Theme.ControlFont(card.BodyLabel, card.BodyLabel.Font.SizeInPoints * CompactFontScale);
             int natural = Math.Max(TextRenderer.MeasureText(card.TitleLabel.Text, title).Width,
                 card.BodyLabel.Text.Split('\n').Max(line => TextRenderer.MeasureText(line, body).Width));
             int width = Math.Clamp(natural + 90, Math.Min(360, original.Width), original.Width);
@@ -126,7 +126,7 @@ internal sealed partial class GameForm
         Font fitted;
         while (true)
         {
-            fitted = Theme.Font(size, style);
+            fitted = Theme.ControlFont(control, size, style);
             Size measured = control is TextBoxBase or NumericUpDown
                 ? TextRenderer.MeasureText(control.Text, fitted, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix)
                 : MeasureWrapped(control.Text, fitted, width);
@@ -246,7 +246,7 @@ internal sealed partial class GameForm
         [
             ("hotspot_lantern", "공방 왼쪽 벽의 별등 금고를 눌러 보세요.", PuzzleId.Lanterns),
             ("hotspot_desk", "공방 왼쪽 아래의 마리의 책상을 눌러 가까이 살펴보세요.", null),
-            ("hotspot_melody", "공방 가운데 아래의 설구 계산대를 눌러 보세요.", PuzzleId.Melody),
+            ("hotspot_melody", "공방 가운데 아래의 스노글로브 계산대를 눌러 보세요.", PuzzleId.Melody),
             ("hotspot_loom", "공방 오른쪽 벽난로 앞의 양말 장치를 눌러 보세요.", PuzzleId.RibbonLoom),
             ("desk_letter", "마리의 책상 가운데에 놓인 봉투를 눌러 보세요.", PuzzleId.LetterAcrostic),
             ("desk_toys", "마리의 책상 위쪽 장난감 선반을 눌러 보세요.", PuzzleId.ToyCipher),
@@ -264,7 +264,7 @@ internal sealed partial class GameForm
         (PuzzleId Puzzle, GameScreen Screen, string Hint)[] puzzles =
         [
             (PuzzleId.Lanterns, GameScreen.Lanterns, "별등 금고: 이웃한 숫자끼리 어떤 관계인지 비교해 보세요."),
-            (PuzzleId.Melody, GameScreen.Melody, "설구 계산대: 같은 장식은 모든 줄에서 같은 값을 가집니다."),
+            (PuzzleId.Melody, GameScreen.Melody, "스노글로브 계산대: 같은 장식은 모든 줄에서 같은 값을 가집니다."),
             (PuzzleId.RibbonLoom, GameScreen.RibbonLoom, "양말 장치: 바로 이웃해야 하는 두 색을 한 묶음으로 생각해 보세요."),
             (PuzzleId.LetterAcrostic, GameScreen.LetterAcrostic, "마리의 편지: 각 줄의 시작 부분에 주목해 보세요."),
             (PuzzleId.ToyCipher, GameScreen.ToyCipher, "장난감 암호: 제목에 등장하는 종의 번호를 다시 읽어 보세요."),
@@ -279,7 +279,7 @@ internal sealed partial class GameForm
         }
 
         return _state.ClockRestored
-            ? "별시계가 복구되었습니다. 두 선택의 의미를 살펴보고 마지막 선택을 하세요."
+            ? "별시계가 열렸습니다. 선물을 전할지, 태엽으로 쓸지 선택하세요."
             : "별시계: 획득한 기억을 펼쳐 숫자가 새겨진 조각과 다이얼의 이름을 비교해 보세요.";
     }
 }

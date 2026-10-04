@@ -68,6 +68,15 @@ internal static partial class PostalRoomSmoke
                 {
                     Check(!((AtmosphereCard)form.Controls.Find("ToyCipherRecord", true).Single()).BodyLabel.Text.Contains("A ↔ N", StringComparison.Ordinal), "no solved cipher lookup table");
                 }
+                if (method == "ShowSnowglobePuzzle")
+                {
+                    Label equation = (Label)form.Controls.Find("OrnamentEquationText", true).Single();
+                    Check(equation.Text.Contains('⛄')
+                        && equation.Text.Contains("🎄", StringComparison.Ordinal)
+                        && equation.Text.Contains("🎁", StringComparison.Ordinal), "equation displays all three emoji");
+                    Check(equation.Font.Name == "Segoe UI Emoji", "equation keeps emoji font after layout at " + window.Width);
+                    CheckTextFits(form, "OrnamentEquationText");
+                }
                 if (method == "ShowStarChartPuzzle")
                 {
                     Check(!((AtmosphereCard)form.Controls.Find("StarChartRecord", true).Single()).BodyLabel.Text.Contains("각 글자를", StringComparison.Ordinal), "no star chart solution footer");
@@ -87,6 +96,10 @@ internal static partial class PostalRoomSmoke
         Check(Get<Label>(form, "_hintText").Text.Length == 0, "clock no settings solution footer");
         CheckVisibleText(form, "clock");
         Capture(form, "clock-compact");
+        Call(form, "ShowChoice");
+        Check(Get<Dictionary<string, Button>>(form, "_actions")["choice_gift"].Text.Contains("노엘", StringComparison.Ordinal), "final gift recipient matches introduction");
+        CheckVisibleText(form, "choice");
+        Capture(form, "choice-compact");
         Call(form, "ShowMainMenu", false);
         Call(form, "ShowGuideMenu");
         CheckVisibleText(form, "guide");
