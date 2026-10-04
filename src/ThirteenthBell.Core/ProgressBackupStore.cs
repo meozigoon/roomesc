@@ -19,6 +19,10 @@ public sealed class ProgressBackup
 
     public bool ClockRestored { get; set; }
 
+    public PostalRoomProgress? Postal { get; set; }
+
+    public List<string> InspectedLocations { get; set; } = [];
+
     public long ElapsedMilliseconds { get; set; }
 
     public string Screen { get; set; } = "Room";
@@ -140,6 +144,7 @@ public sealed class ProgressBackupStore
         backup.Nickname ??= string.Empty;
         backup.SolvedPuzzles ??= [];
         backup.Screen ??= string.Empty;
+        backup.InspectedLocations ??= [];
 
         if (backup.Version != ProgressBackup.CurrentVersion)
         {
@@ -158,6 +163,13 @@ public sealed class ProgressBackupStore
             || string.IsNullOrWhiteSpace(backup.Screen))
         {
             error = "진행 백업의 내용이 올바르지 않습니다.";
+            return false;
+        }
+
+        if (backup.Postal is not null && (!backup.Postal.IsValid()
+            || (!backup.Postal.DoorOpened && backup.SolvedPuzzles.Count > 0)))
+        {
+            error = "우편실 진행 백업의 내용이 올바르지 않습니다.";
             return false;
         }
 

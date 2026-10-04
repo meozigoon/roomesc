@@ -7,7 +7,8 @@ internal enum BackgroundMusicKind
 {
     None,
     Menu,
-    Game
+    Game,
+    PostalRoom
 }
 
 internal sealed class BackgroundMusicPlayer : IDisposable
@@ -24,6 +25,7 @@ internal sealed class BackgroundMusicPlayer : IDisposable
     private bool _disposed;
     private BackgroundMusicKind _requestedKind;
     private BackgroundMusicKind _playingKind;
+    private bool _opening;
 
     public BackgroundMusicPlayer(bool playbackAvailable = true)
     {
@@ -77,6 +79,7 @@ internal sealed class BackgroundMusicPlayer : IDisposable
         if (_requestedKind == kind
             && (!_playbackAvailable
                 || !_enabled
+                || _opening
                 || (_playingKind == kind && _output?.PlaybackState == PlaybackState.Playing && !_fadingOut)))
         {
             return;
@@ -99,6 +102,15 @@ internal sealed class BackgroundMusicPlayer : IDisposable
 
     private void StartRequestedTrack(float initialVolume)
     {
+        if (_opening)
+        {
+            return;
+        }
+        _ = StartRequestedTrackAsync(initialVolume);
+    }
+
+    private async Task StartRequestedTrackAsync(float initialVolume)
+    {
         StopPlayback();
         if (_disposed || !_enabled || _requestedKind == BackgroundMusicKind.None)
         {
@@ -107,11 +119,15 @@ internal sealed class BackgroundMusicPlayer : IDisposable
         }
 
         BackgroundMusicKind kind = _requestedKind;
-        string fileName = kind == BackgroundMusicKind.Menu
-            ? "menu-bgmusic.mp3"
-            : "game-bgmusic.mp3";
+        string fileName = kind switch
+        {
+            BackgroundMusicKind.Menu => "menu-bgmusic.mp3",
+            BackgroundMusicKind.Game => "game-bgmusic.mp3",
+            BackgroundMusicKind.PostalRoom => "first_game-bgmusic.mp3",
+            _ => throw new InvalidOperationException("지원하지 않는 배경 음악 종류입니다.")
+        };
         string path = Path.Combine(AppContext.BaseDirectory, "Assets", "Music", fileName);
-
+        _opening = true;
         try
         {
             if (!File.Exists(path))
@@ -119,13 +135,17 @@ internal sealed class BackgroundMusicPlayer : IDisposable
                 throw new FileNotFoundException("배경음악 파일을 찾을 수 없습니다.", path);
             }
 
-            _reader = new AudioFileReader(path) { Volume = Math.Clamp(initialVolume, 0f, TargetVolume) };
-            _loop = new LoopingWaveStream(_reader);
-            _output = new WasapiPlayerBuilder()
-                .WithSharedMode()
-                .WithLatency(120)
-                .Build();
-            _output.Init(_loop);
+            var prepared = await Task.Run(() => PrepareTrack(path, initialVolume)).ConfigureAwait(true);
+            if (_disposed || !_enabled || _requestedKind != kind)
+            {
+                prepared.Output.Dispose();
+                prepared.Loop.Dispose();
+                prepared.Reader.Dispose();
+                return;
+            }
+            _reader = prepared.Reader;
+            _loop = prepared.Loop;
+            _output = prepared.Output;
             _output.Play();
             _playingKind = kind;
             _fadingOut = false;
@@ -136,11 +156,43 @@ internal sealed class BackgroundMusicPlayer : IDisposable
             or UnauthorizedAccessException
             or InvalidOperationException
             or NotSupportedException
+            or COMException
             or ArgumentException)
         {
             LastError = exception.Message;
-            _fadeTimer.Stop();
+            if (!_disposed)
+            {
+                _fadeTimer.Stop();
+            }
             StopPlayback();
+        }
+        finally
+        {
+            _opening = false;
+            if (!_disposed && _enabled && _requestedKind != kind)
+            {
+                StartRequestedTrack(0f);
+            }
+        }
+    }
+
+    private static (AudioFileReader Reader, LoopingWaveStream Loop, WasapiPlayer Output) PrepareTrack(string path, float initialVolume)
+    {
+        AudioFileReader reader = new(path) { Volume = Math.Clamp(initialVolume, 0f, TargetVolume) };
+        LoopingWaveStream loop = new(reader);
+        WasapiPlayer? output = null;
+        try
+        {
+            output = new WasapiPlayerBuilder().WithSharedMode().WithLatency(120).Build();
+            output.Init(loop);
+            return (reader, loop, output);
+        }
+        catch
+        {
+            output?.Dispose();
+            loop.Dispose();
+            reader.Dispose();
+            throw;
         }
     }
 

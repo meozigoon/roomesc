@@ -57,7 +57,9 @@ internal sealed class InvisibleHotspotButton : Button
     {
         SetStyle(ControlStyles.SupportsTransparentBackColor
             | ControlStyles.OptimizedDoubleBuffer
-            | ControlStyles.UserPaint, true);
+            | ControlStyles.UserPaint
+            | ControlStyles.AllPaintingInWmPaint
+            | ControlStyles.Opaque, true);
         BackColor = Color.Transparent;
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
@@ -69,10 +71,15 @@ internal sealed class InvisibleHotspotButton : Button
 
     protected override void OnPaintBackground(PaintEventArgs eventArgs)
     {
+        // Opaque hotspot painting includes the exact scene region in OnPaint.
     }
 
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
+        if (Parent is SceneCanvas scene)
+        {
+            scene.PaintBackdropRegion(eventArgs.Graphics, Bounds);
+        }
         if (Focused && ShowFocusCues)
         {
             Rectangle focus = Rectangle.Inflate(ClientRectangle, -3, -3);

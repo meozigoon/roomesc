@@ -176,10 +176,18 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             }
 
             using JsonDocument document = JsonDocument.Parse(responseText);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("result", out JsonElement resultElement)
+                || resultElement.ValueKind != JsonValueKind.String
+                || resultElement.GetString() != "reserved")
+            {
+                return new NicknameReservationResult(NicknameReservationStatus.Unavailable, null, "닉네임 서버의 등록 승인을 확인하지 못했습니다.");
+            }
             string? reservedNickname = document.RootElement.TryGetProperty("nickname", out JsonElement nicknameElement)
                 ? nicknameElement.GetString()
                 : null;
-            if (string.IsNullOrWhiteSpace(reservedNickname))
+            if (string.IsNullOrWhiteSpace(reservedNickname)
+                || !string.Equals(reservedNickname, normalized, StringComparison.Ordinal))
             {
                 return new NicknameReservationResult(
                     NicknameReservationStatus.Unavailable,
