@@ -1275,7 +1275,7 @@ internal sealed partial class GameForm : Form
         _scene.SceneImage = _images["postal-room.png"];
         AtmosphereCard letter = CreateAtmosphereCard(
             "시계공 마리 벨의 긴급 기록",
-            "루미에르 마을, 성 니콜라스 골목 13번. 너는 시계공방 앞 우편실에 도착했다.\n크리스마스이브 23시 47분, 마을의 시간과 배달부 엘리아스의 마지막 배송이 멈췄다.\n\n나는 이 공방의 시계공 마리 벨이다. 엘리아스의 명단에서\n어린 노엘 애스터의 선물과 기다렸다는 기억이 동시에 지워지는 것을 발견했다.\n붉은 선물을 태엽으로 쓰면 모두의 시간은 돌아오지만 노엘의 기다림은 사라진다.\n\n엘리아스는 마지막 수취인을 지키려 공방 문을 두 봉인으로 잠갔다.\n우편실에 남은 짐과 배송 기록, 종의 울림에서 들어오는 길을 찾아라.\n그다음 공방의 기억을 되찾아 마지막 별시계에서 누구의 시간을 지킬지 결정해라.\n\n시계공 마리 벨",
+            "이 기록을 발견한 분께.\n\n여기는 루미에르 마을, 성 니콜라스 골목 13번의 시계 공방입니다.\n크리스마스이브 밤 11시 47분, 별시계가 멈추면서 마을의 시간도 멈췄습니다.\n그 뒤로 배달 명단에서 어린 노엘 애스터의 이름이 지워지기 시작했습니다.\n이대로라면 노엘이 선물을 기다렸다는 사실마저 아무도 기억하지 못할 것입니다.\n\n배달부 엘리아스는 노엘의 선물을 별시계 안에 숨기고 공방 문을 봉인했습니다.\n그 선물을 태엽 대신 쓰면 시간은 돌아오지만, 노엘의 기억은 영영 사라집니다.\n우편실에 남은 짐과 기록을 살펴 두 봉인을 풀어 주세요.\n공방의 장치에 흩어진 기억 조각을 모으면 별시계를 열 수 있습니다.\n노엘에게 선물을 전할 방법도 그 안에서 찾을 수 있기를 바랍니다.\n\n시계공 마리 벨",
             AtmosphereCardStyle.Letter,
             new Rectangle(165, 30, 1070, 555),
             new Rectangle(65, 34, 900, 58),
@@ -1284,7 +1284,7 @@ internal sealed partial class GameForm : Form
             11.2f);
         letter.Name = "LetterDocument";
         _scene.Controls.Add(letter);
-        AddAction("continue", "기록을 접고 우편실 조사하기", new Rectangle(525, 610, 350, 62), (_, _) => ShowPostalRoom(), 1);
+        AddAction("continue", "우편실 살펴보기", new Rectangle(525, 610, 350, 62), (_, _) => ShowPostalRoom(), 1);
     }
 
     private void ShowRoom()
@@ -1295,11 +1295,11 @@ internal sealed partial class GameForm : Form
             return;
         }
 
-        SetScreen(GameScreen.Room, "멈춘 공방", "방 안의 물건을 직접 눌러 조사하세요. 눈에 띄는 장치와 물건을 차례로 살펴보세요.", "장치의 단서를 풀어 기억을 되찾으면 중앙 별시계의 봉인이 열립니다.");
+        SetScreen(GameScreen.Room, "멈춘 공방", "벽난로에는 불이 타오르지만 별시계의 바늘은 멈춰 있습니다. 방 안의 물건을 눌러 살펴보세요.", "장치에 남은 단서를 풀고 기억 조각을 모으면 중앙의 별시계를 열 수 있습니다.");
         _scene.SceneImage = _images[WorkshopImage];
         AddHotspot("hotspot_lantern", PuzzleDone(PuzzleId.Lanterns) ? "금고 완료" : "별등 금고", new Rectangle(5, 265, 150, 125), (_, _) => ShowLanternPuzzle(), 1, PuzzleDone(PuzzleId.Lanterns));
         AddHotspot("hotspot_desk", "마리의 책상 가까이 보기", new Rectangle(160, 315, 270, 145), (_, _) => ShowDesk(), 2, false);
-        AddHotspot("hotspot_melody", PuzzleDone(PuzzleId.Melody) ? "계산대 완료" : "설구 계산대", new Rectangle(425, 450, 225, 64), (_, _) => ShowSnowglobePuzzle(), 2, PuzzleDone(PuzzleId.Melody));
+        AddHotspot("hotspot_melody", PuzzleDone(PuzzleId.Melody) ? "계산대 완료" : "스노글로브 계산대", new Rectangle(425, 450, 225, 64), (_, _) => ShowSnowglobePuzzle(), 2, PuzzleDone(PuzzleId.Melody));
         AddHotspot("hotspot_clock", _state.CanOpenClock ? "별시계 열기" : "별시계 잠김", new Rectangle(590, 175, 225, 180), (_, _) => ShowClockPuzzle(), 4, false);
         AddHotspot("hotspot_loom", PuzzleDone(PuzzleId.RibbonLoom) ? "양말 장치 완료" : "양말 정렬 장치", new Rectangle(1060, 325, 225, 150), (_, _) => ShowStockingPuzzle(), 5, PuzzleDone(PuzzleId.RibbonLoom));
     }
@@ -1309,8 +1309,8 @@ internal sealed partial class GameForm : Form
         SetScreen(
             GameScreen.Desk,
             "마리의 책상",
-            "책상 정면에는 봉인된 편지, 장난감 선반, 황동 나침반이 놓인 별자리 도면이 있습니다.",
-            "봉투와 선반의 장난감, 왼쪽 별자리 도면을 직접 눌러 조사하세요.");
+            "책상에는 봉인된 편지와 별자리 도면이 놓여 있습니다. 그 위 선반에는 작은 장난감들이 늘어서 있습니다.",
+            "봉투, 장난감 선반, 나침반이 놓인 별자리 도면을 눌러 살펴보세요.");
         _scene.SceneImage = _images["desk-closeup.png"];
         AddHotspot("desk_letter", PuzzleDone(PuzzleId.LetterAcrostic) ? "마리의 편지 다시 읽기" : "봉인된 편지 열기", new Rectangle(575, 425, 275, 130), (_, _) => ShowMarieLetter(), 1, PuzzleDone(PuzzleId.LetterAcrostic));
         AddHotspot("desk_toys", PuzzleDone(PuzzleId.ToyCipher) ? "장난감 암호 완료" : "장난감 선반 조사", new Rectangle(230, 35, 1000, 210), (_, _) => ShowToyCipherPuzzle(), 2, PuzzleDone(PuzzleId.ToyCipher));
@@ -1350,7 +1350,7 @@ internal sealed partial class GameForm : Form
 
         AtmosphereCard letter = CreateAtmosphereCard(
             "마리 벨이 남긴 편지",
-            "Candle 빛 아래서 지워진 이름을 처음 보았다.\nHearth의 재 속에는 엘리아스가 떨어뜨린 배달 명단이 남아 있었다.\nIcicle처럼 차가운 잉크는 노엘 애스터의 줄만 삼켰다.\nMidnight 전에 흩어진 기억을 되찾아야 한다.\nNorth 창가의 별시계는 23시 47분에서 기다린다.\nEnvelope의 봉인은 내가 직접 찍었다.\nYear의 마지막 밤, 첫 글자들이 마지막 통로를 말해 줄 것이다.\n\n네가 이 글을 읽는다면 노엘의 기다림까지 함께 기억해 줘.\n시계공 마리 벨",
+            "Candle — 촛불 아래에서 배달 명단을 펼쳤을 때, 노엘의 이름이 흐려지고 있었다.\nHearth — 벽난로 곁에서 엘리아스는 마지막 선물만은 꼭 전하겠다고 말했다.\nIcicle — 고드름처럼 차가워진 잉크가 노엘의 이름을 조금씩 지워 갔다.\nMidnight — 자정을 알리는 종이 울리기 전에 노엘의 기억을 되찾아야 한다.\nNorth — 북쪽 창밖의 빛을 따라가면 노엘의 집을 찾을 수 있다.\nEnvelope — 이 봉투에는 엘리아스가 남긴 배달 통로를 숨겨 두었다.\nYear — 해마다 선물을 기다리는 아이에게 올해도 누군가 찾아가기를.\n\n첫 글자들이 가리키는 길을 찾아, 노엘에게 마지막 선물을 전해 주세요.\n시계공 마리 벨",
             AtmosphereCardStyle.Letter,
             new Rectangle(170, 20, 1060, 535),
             new Rectangle(60, 30, 940, 55),
@@ -1401,11 +1401,11 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.LetterAcrostic))
         {
-            ShowSolvedMessage(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "편지의 일곱 시작 글자가 굴뚝을 가리키자 배달부 엘리아스의 잃어버린 경로가 되살아났다.");
+            ShowSolvedMessage(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "일곱 줄의 첫 글자가 CHIMNEY, 굴뚝을 가리킵니다. 엘리아스가 남긴 마지막 배달 통로를 찾았습니다.");
             return;
         }
 
-        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "마리의 편지에는 영어 단어로 시작하는 일곱 문장이 있습니다. 편지에 숨겨진 통로의 이름을 입력하세요.", string.Empty);
+        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "마리의 편지에서 일곱 영어 단어를 옮겨 적었습니다. 숨겨진 배달 통로의 이름을 영어로 입력하세요.", string.Empty);
         _scene.SceneImage = _images["desk-closeup.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "편지 가장자리의 연필 메모",
@@ -1425,11 +1425,11 @@ internal sealed partial class GameForm : Form
         {
             if (PuzzleRules.MatchesLetterAcrostic(editor.Text))
             {
-                CompletePuzzle(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "조각의 각인: ‘굴뚝, 지워진 배달 경로’");
+                CompletePuzzle(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "봉투의 봉인이 풀리며 기억 조각이 나타납니다.\n새겨진 글자: CHIMNEY — 굴뚝으로 이어지는 배달 통로");
                 return;
             }
 
-            RejectTextPuzzle(editor, "봉인이 반응하지 않습니다. 편지와 입력한 이름을 다시 확인하세요.");
+            RejectTextPuzzle(editor, "봉투의 봉인이 풀리지 않습니다. 편지의 단어와 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("letter_acrostic_confirm", "통로 확인", new Rectangle(770, 440, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1441,15 +1441,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.ToyCipher))
         {
-            ShowSolvedMessage(PuzzleId.ToyCipher, "다섯 번째 기억 조각", "열세 칸을 되돌리자 장난감들이 가리킨 시각이 MIDNIGHT, 자정으로 읽혔다.");
+            ShowSolvedMessage(PuzzleId.ToyCipher, "다섯 번째 기억 조각", "블록의 암호는 MIDNIGHT, 자정을 뜻했습니다. 엘리아스가 선물을 전하려던 시각을 되찾았습니다.");
             return;
         }
 
-        SetScreen(GameScreen.ToyCipher, "퍼즐 5: 열세 번째 종의 장난감 암호", "장난감 뒤의 여덟 블록에 적힌 암호를 해독하세요.", string.Empty);
+        SetScreen(GameScreen.ToyCipher, "퍼즐 5: 열세 번째 종의 장난감 암호", "장난감 뒤에 여덟 개의 블록이 숨겨져 있습니다. 블록에 적힌 암호를 풀어 영어 단어를 입력하세요.", string.Empty);
         _scene.SceneImage = _images["desk-closeup.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "장난감 선반 뒤의 블록",
-            "Z V Q A V T U G\n\n열세 번째 종은 알파벳도 같은 수만큼 되돌린다.",
+            "Z V Q A V T U G\n\n열세 번째 종이 울리면, 글자들도 열세 걸음 뒤로 돌아간다.",
             AtmosphereCardStyle.GiftTag,
             new Rectangle(285, 90, 830, 310),
             new Rectangle(55, 30, 720, 50),
@@ -1465,11 +1465,11 @@ internal sealed partial class GameForm : Form
         {
             if (PuzzleRules.MatchesToyCipher(editor.Text))
             {
-                CompletePuzzle(PuzzleId.ToyCipher, "다섯 번째 기억 조각", "조각의 각인: ‘MIDNIGHT, 열세 칸 뒤의 자정’");
+                CompletePuzzle(PuzzleId.ToyCipher, "다섯 번째 기억 조각", "블록이 제자리에 맞춰지며 기억 조각이 나타납니다.\n새겨진 글자: MIDNIGHT — 마지막 선물을 전할 자정");
                 return;
             }
 
-            RejectTextPuzzle(editor, "장난감이 반응하지 않습니다. 블록의 기록과 입력을 다시 확인하세요.");
+            RejectTextPuzzle(editor, "블록이 맞물리지 않습니다. 암호문과 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("toy_cipher_confirm", "암호 해독", new Rectangle(770, 425, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1481,15 +1481,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.StarChart))
         {
-            ShowSolvedMessage(PuzzleId.StarChart, "여섯 번째 기억 조각", "암호문의 각 글자를 한 발자국 뒤로 옮기자 AURORA, 북쪽 하늘의 오로라가 나타났다.");
+            ShowSolvedMessage(PuzzleId.StarChart, "여섯 번째 기억 조각", "도면의 암호는 AURORA, 오로라를 뜻했습니다. 북쪽 하늘의 빛이 노엘의 집으로 가는 길을 알려 줍니다.");
             return;
         }
 
-        SetScreen(GameScreen.StarChart, "퍼즐 6: 한 발자국 뒤의 카이사르 암호", "별자리 도면의 기록을 읽고 암호문 BVSPSB의 원래 단어를 찾으세요.", string.Empty);
+        SetScreen(GameScreen.StarChart, "퍼즐 6: 한 발자국 뒤의 카이사르 암호", "별자리 도면에 짧은 기록과 암호문 BVSPSB가 남아 있습니다. 암호를 풀어 영어 단어를 입력하세요.", string.Empty);
         _scene.SceneImage = _images["desk-closeup.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "북쪽 별자리 도면",
-            "북쪽 하늘을 밝히려면\n한 발자국 뒤로 가야 한다.\n\nB  V  S  P  S  B",
+            "북쪽 하늘의 빛을 찾으려면\n한 걸음 뒤로 돌아가라.\n\nB  V  S  P  S  B",
             AtmosphereCardStyle.Letter,
             new Rectangle(300, 70, 800, 330),
             new Rectangle(55, 30, 690, 50),
@@ -1505,11 +1505,11 @@ internal sealed partial class GameForm : Form
         {
             if (PuzzleRules.MatchesStarChart(editor.Text))
             {
-                CompletePuzzle(PuzzleId.StarChart, "여섯 번째 기억 조각", "조각의 각인: ‘AURORA, 북쪽 창의 빛’");
+                CompletePuzzle(PuzzleId.StarChart, "여섯 번째 기억 조각", "도면 위로 별빛이 번지며 기억 조각이 나타납니다.\n새겨진 글자: AURORA — 노엘의 집으로 이끄는 북쪽 하늘의 빛");
                 return;
             }
 
-            RejectTextPuzzle(editor, "별빛이 돌아오지 않습니다. 도면의 기록과 입력을 다시 확인하세요.");
+            RejectTextPuzzle(editor, "도면에 빛이 들어오지 않습니다. 기록과 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("star_chart_confirm", "별빛 복원", new Rectangle(770, 425, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1561,7 +1561,7 @@ internal sealed partial class GameForm : Form
         }
         else if (new Rectangle(1260, 160, 120, 105).Contains(point))
         {
-            observation = "작은 흔들목마다. 금방이라도 선반 끝까지 달려갈 듯 앞을 보고 있다.";
+            observation = "작은 흔들 목마가 놓여 있다. 나무로 깎은 갈기에 손때가 묻어 있다.";
         }
         else if (new Rectangle(1350, 235, 50, 175).Contains(point))
         {
@@ -1569,7 +1569,7 @@ internal sealed partial class GameForm : Form
         }
         else if (new Rectangle(1160, 245, 105, 125).Contains(point))
         {
-            observation = "곰 인형이다. 주인을 기다린 시간이 긴지 털이 조금 바래 있다.";
+            observation = "곰 인형이다. 오랫동안 주인을 기다린 듯 털이 조금 바래 있다.";
         }
         else if (new Rectangle(1010, 360, 220, 165).Contains(point))
         {
@@ -1577,7 +1577,7 @@ internal sealed partial class GameForm : Form
         }
         else if (new Rectangle(860, 135, 290, 390).Contains(point))
         {
-            observation = "벽난로의 불은 따뜻하지만 장작은 줄어들지 않는다. 이 공방의 시간만 멈춘 모양이다.";
+            observation = "벽난로의 불은 따뜻하지만 장작은 줄어들지 않는다. 불꽃마저 같은 모습으로 멈춰 있다.";
         }
         else if (new Rectangle(920, 100, 205, 190).Contains(point))
         {
@@ -1589,7 +1589,7 @@ internal sealed partial class GameForm : Form
         }
         else if (new Rectangle(0, 75, 120, 325).Contains(point))
         {
-            observation = "낡은 장난감들이 빼곡하다. 모두 수리되었지만 찾아간 사람은 없는 듯하다.";
+            observation = "낡은 장난감들이 빼곡하다. 수리는 모두 끝났지만 아직 주인에게 돌아가지 못한 모양이다.";
         }
         else if (new Rectangle(780, 75, 170, 145).Contains(point))
         {
@@ -1597,11 +1597,11 @@ internal sealed partial class GameForm : Form
         }
         else if (point.Y < 190)
         {
-            observation = "높은 선반에는 완성된 장난감들이 놓여 있다. 먼지가 없어 누군가 계속 돌본 듯하다.";
+            observation = "높은 선반에는 완성된 장난감들이 놓여 있다. 먼지 하나 없이 깨끗하다. 시간이 멈추기 전까지 누군가 정성껏 돌본 모양이다.";
         }
         else if (point.X < 410)
         {
-            observation = "작업대에는 작은 공구 자국이 겹겹이 남아 있다. 서둘러 자리를 비운 흔적은 아니다.";
+            observation = "작업대에는 작은 공구 자국이 겹겹이 남아 있다. 공구는 작업하던 자리에 그대로 놓여 있다.";
         }
         else if (point.X > 1030)
         {
@@ -1620,7 +1620,7 @@ internal sealed partial class GameForm : Form
     {
         if (_treeEasterEggFound)
         {
-            ShowRoomEvent("작은 트리의 별이 희미하게 반짝인다. 숨겨진 인사는 아직 그 자리에 남아 있다.");
+            ShowRoomEvent("작은 트리의 별이 희미하게 반짝인다. 별 아래에서 찾은 작은 쪽지가 떠오른다.");
             PlaySound(GameSound.NoteStar);
             return;
         }
@@ -1628,7 +1628,7 @@ internal sealed partial class GameForm : Form
         _treeEasterEggClicks++;
         ShowRoomEvent(_treeEasterEggClicks switch
         {
-            1 => "작은 크리스마스 트리 장식이다. 누가 두고 간 듯하다.",
+            1 => "작은 크리스마스 트리 장식이다. 꼭대기의 별 장식이 눈에 띈다.",
             2 => "트리를 다시 건드리자 꼭대기의 별이 아주 조금 흔들렸다.",
             3 => "별 아래에 접힌 종잇조각이 보인다. 손끝에는 닿지 않는다.",
             4 => "한 번만 더 건드리면 종잇조각이 떨어질 것 같다.",
@@ -1650,15 +1650,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.Lanterns))
         {
-            ShowSolvedMessage(PuzzleId.Lanterns, "첫 번째 기억 조각", "12월과 25일에서 시작된 별빛은 앞선 두 기억을 더하며 다음 길을 밝혔다.");
+            ShowSolvedMessage(PuzzleId.Lanterns, "첫 번째 기억 조각", "숫자의 규칙을 찾자 금고가 열렸습니다. 안에서 발견한 기억 조각에는 자정을 가리키는 12가 새겨져 있습니다.");
             return;
         }
 
-        SetScreen(GameScreen.Lanterns, "퍼즐 1: 얼어붙은 별빛 금고", "금고는 크리스마스의 두 숫자에서 시작해 앞선 기억을 이어 붙였습니다. 마지막 빈칸의 세 자리 수를 입력하세요.", "정답 칸에는 숫자 세 자리만 들어갑니다.");
+        SetScreen(GameScreen.Lanterns, "퍼즐 1: 얼어붙은 별빛 금고", "금고 표면에 크리스마스 날짜로 시작하는 숫자들이 새겨져 있습니다. 규칙을 찾아 빈칸에 들어갈 세 자리 수를 입력하세요.", "정답 칸에는 숫자 세 자리만 들어갑니다.");
         _scene.SceneImage = _images["lanterns.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "서리 금고의 기록",
-            "12     25     37     62     99     ?\n앞의 수들이 남긴 규칙으로 마지막 수를 찾으시오.",
+            "12     25     37     62     99     ?\n숫자의 규칙을 찾아 빈칸을 채워라.",
             AtmosphereCardStyle.Letter,
             new Rectangle(260, 115, 880, 255),
             new Rectangle(55, 32, 770, 50),
@@ -1675,14 +1675,14 @@ internal sealed partial class GameForm : Form
         {
             if (PuzzleRules.MatchesFrostVaultCode(editor.Text))
             {
-                CompletePuzzle(PuzzleId.Lanterns, "첫 번째 기억 조각", "조각의 각인: ‘12, 자정의 시작’");
+                CompletePuzzle(PuzzleId.Lanterns, "첫 번째 기억 조각", "금고가 열리며 기억 조각이 나타납니다.\n새겨진 숫자: 12 — 자정을 가리키는 시침");
                 return;
             }
 
             _state.RecordFailure();
             editor.Clear();
             editor.Focus();
-            ShowNarrativeMessage("금고가 다시 얼어붙었습니다. 기록과 입력한 숫자를 다시 확인하세요.");
+            ShowNarrativeMessage("금고가 열리지 않습니다. 숫자의 규칙과 입력한 답을 다시 확인하세요.");
             PlaySound(GameSound.Wrong);
             SaveProgressBackup(reportFailure: false);
         }
@@ -1696,15 +1696,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.Melody))
         {
-            ShowSolvedMessage(PuzzleId.Melody, "두 번째 기억 조각", "설구의 장식마다 숨은 값이 드러나자 멈춘 마을의 불빛이 다시 계산된 박자로 켜졌다.");
+            ShowSolvedMessage(PuzzleId.Melody, "두 번째 기억 조각", "장식의 값을 맞추자 스노글로브에 불이 들어왔습니다. 받침에서 찾은 기억 조각에는 00이 새겨져 있습니다.");
             return;
         }
 
-        SetScreen(GameScreen.Melody, "퍼즐 2: 요정들의 장식 계산식", "세 식으로 눈사람, 트리, 선물의 값을 찾은 뒤 마지막 식을 계산하세요.", string.Empty);
+        SetScreen(GameScreen.Melody, "퍼즐 2: 요정들의 장식 계산식", "눈사람, 트리, 선물 그림으로 된 식이 새겨져 있습니다. 각 그림의 값을 구한 뒤 마지막 식의 답을 입력하세요.", string.Empty);
         _scene.SceneImage = _images["snowglobe.png"];
         AtmosphereCard calculation = CreateAtmosphereCard(
-            "설구 받침의 계산판",
-            "눈사람 + 눈사람 = 16\n눈사람 + 트리 = 15\n트리 + 선물 × 눈사람 = 39\n\n선물 + 눈사람 × 트리 = ?",
+            "스노글로브 받침의 계산판",
+            "⛄ + ⛄ = 16\n⛄ + 🎄 = 15\n🎄 + 🎁 × ⛄ = 39\n\n🎁 + ⛄ × 🎄 = ?",
             AtmosphereCardStyle.Letter,
             new Rectangle(250, 100, 900, 320),
             new Rectangle(55, 28, 790, 50),
@@ -1712,6 +1712,12 @@ internal sealed partial class GameForm : Form
             18,
             13.5f);
         calculation.Name = "OrnamentEquationRecord";
+        calculation.BodyLabel.Name = "OrnamentEquationText";
+        Font equationFont = calculation.BodyLabel.Font;
+        calculation.BodyLabel.Font = Theme.ControlFont(calculation.BodyLabel, 18);
+        equationFont.Dispose();
+        calculation.BodyLabel.AccessibleName = "눈사람 더하기 눈사람은 16. 눈사람 더하기 트리는 15. 트리 더하기 선물 곱하기 눈사람은 39. 선물 더하기 눈사람 곱하기 트리의 값은?";
+        calculation.BodyLabel.AccessibleDescription = "같은 그림은 모든 식에서 같은 값을 나타냅니다.";
         _scene.Controls.Add(calculation);
 
         TextBox editor = CreatePuzzleCodeEditor("OrnamentEquationCode", new Rectangle(485, 440, 225, 62), 3, "장식 계산식의 숫자 정답");
@@ -1721,19 +1727,19 @@ internal sealed partial class GameForm : Form
         {
             if (PuzzleRules.MatchesOrnamentEquationCode(editor.Text))
             {
-                CompletePuzzle(PuzzleId.Melody, "두 번째 기억 조각", "조각의 각인: ‘00, 멈춤 뒤의 첫 박자’");
+                CompletePuzzle(PuzzleId.Melody, "두 번째 기억 조각", "계산판에 불이 들어오며 기억 조각이 나타납니다.\n새겨진 숫자: 00 — 자정을 가리키는 분침");
                 return;
             }
 
             _state.RecordFailure();
             editor.Clear();
             editor.Focus();
-            ShowNarrativeMessage("계산판의 불빛이 꺼졌습니다. 기록과 입력을 다시 확인하세요.");
+            ShowNarrativeMessage("계산판의 불빛이 꺼졌습니다. 식과 입력한 답을 다시 확인하세요.");
             PlaySound(GameSound.Wrong);
             SaveProgressBackup(reportFailure: false);
         }
 
-        AddAction("ornament_equation_confirm", "계산판 작동", new Rectangle(730, 440, 190, 62), (_, _) => SubmitCode(), 2);
+        AddAction("ornament_equation_confirm", "계산판 켜기", new Rectangle(730, 440, 190, 62), (_, _) => SubmitCode(), 2);
         editor.KeyDown += (_, eventArgs) => SubmitOnEnter(eventArgs, SubmitCode);
         editor.Focus();
     }
@@ -1742,15 +1748,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.RibbonLoom))
         {
-            ShowSolvedMessage(PuzzleId.RibbonLoom, "세 번째 기억 조각", "네 양말이 제자리를 찾자 1, 2, 2, 5가 이어져 기다림의 날짜를 가리켰다.");
+            ShowSolvedMessage(PuzzleId.RibbonLoom, "세 번째 기억 조각", "양말을 순서대로 걸자 명찰의 숫자가 1225로 이어졌습니다. 장치 안의 기억 조각에는 크리스마스 날짜인 25가 새겨져 있습니다.");
             return;
         }
 
         SetScreen(
             GameScreen.RibbonLoom,
             "퍼즐 3: 벽난로 앞의 양말들",
-            "명찰 숫자: 노랑 1, 초록 2, 빨강 2, 파랑 5\n① 초록은 양끝이 아니다. ② 파랑은 빨강보다 오른쪽이다.\n③ 노랑과 파랑은 이웃하지 않는다. ④ 초록은 빨강 바로 왼쪽이다.",
-            "아래의 양말을 마우스로 끌어 벽난로 위 네 고리에 직접 거세요.");
+            "명찰의 숫자: 노랑 1, 초록 2, 빨강 2, 파랑 5\n① 초록 양말은 양 끝에 걸지 않는다. ② 파랑은 빨강보다 오른쪽에 건다.\n③ 노랑과 파랑은 나란히 걸지 않는다. ④ 초록은 빨강 바로 왼쪽에 건다.",
+            "아래의 양말을 끌어 벽난로 위 네 고리에 걸어 주세요.");
         _scene.SceneImage = _images["stocking-logic.png"];
         _stockingPlacement = [-1, -1, -1, -1];
         _stockingPieceSlots = [-1, -1, -1, -1];
@@ -1902,7 +1908,7 @@ internal sealed partial class GameForm : Form
 
         if (PuzzleRules.MatchesStockingOrder(_stockingPlacement))
         {
-            CompletePuzzle(PuzzleId.RibbonLoom, "세 번째 기억 조각", "조각의 각인: ‘25, 이름 없는 선물의 날’");
+            CompletePuzzle(PuzzleId.RibbonLoom, "세 번째 기억 조각", "양말 장치가 열리며 기억 조각이 나타납니다.\n새겨진 숫자: 25 — 노엘이 선물을 기다리는 크리스마스");
             return;
         }
 
@@ -1914,7 +1920,7 @@ internal sealed partial class GameForm : Form
 
         _lastFailedStockingOrder = signature;
         _state.RecordFailure();
-        ShowNarrativeMessage("네 양말이 모두 걸렸지만 장치가 잠겼습니다. 조건을 다시 확인해 양말의 위치를 바꾸세요.");
+        ShowNarrativeMessage("양말을 모두 걸었지만 장치가 열리지 않습니다. 조건을 다시 읽고 양말의 위치를 바꿔 보세요.");
         PlaySound(GameSound.Wrong);
         UpdateHeader();
         SaveProgressBackup(reportFailure: false);
@@ -1924,7 +1930,7 @@ internal sealed partial class GameForm : Form
     {
         if (!_state.CanOpenClock)
         {
-            ShowRoomEvent("별시계의 홈이 비어 있습니다. 다른 장치의 단서를 따라 기억을 더 되찾으세요.");
+            ShowRoomEvent("별시계를 여는 데 필요한 기억 조각이 아직 부족합니다. 공방과 책상에 남은 단서를 더 살펴보세요.");
             PlaySound(GameSound.Locked);
             return;
         }
@@ -1935,7 +1941,7 @@ internal sealed partial class GameForm : Form
             return;
         }
 
-        SetScreen(GameScreen.Clock, "최종 장치: 별시계", "획득한 기억을 펼쳐 숫자가 새겨진 조각을 시, 분, 날짜 다이얼에 맞추세요.", string.Empty);
+        SetScreen(GameScreen.Clock, "최종 장치: 별시계", "획득한 기억을 펼쳐 확인하세요. 조각에 새겨진 숫자를 시, 분, 날짜 다이얼에 맞춰 주세요.", string.Empty);
         _scene.SceneImage = _images[WorkshopImage];
         Panel clockPanel = new()
         {
@@ -1964,7 +1970,7 @@ internal sealed partial class GameForm : Form
             }
             else
             {
-                ShowNarrativeMessage("별시계가 한 번 떨리고 멈췄습니다. 획득한 기억과 다이얼을 다시 대조하세요.");
+                ShowNarrativeMessage("별시계가 잠깐 움직이다 다시 멈췄습니다. 기억 조각의 숫자와 다이얼을 다시 확인하세요.");
                 PlaySound(GameSound.Wrong);
                 UpdateHeader();
                 SaveProgressBackup(reportFailure: false);
@@ -2003,12 +2009,12 @@ internal sealed partial class GameForm : Form
 
     private void ShowChoice()
     {
-        SetScreen(GameScreen.Choice, "마지막 선택", "별시계 안에서 붉은 상자와 비어 있는 태엽 홈이 나란히 드러났습니다.", "선물은 한 사람의 기다림을 되돌리고, 태엽은 시간을 즉시 되돌리지만 그 기다림을 지웁니다.");
+        SetScreen(GameScreen.Choice, "마지막 선택", "별시계의 덮개가 열렸습니다. 안에는 노엘의 선물과 태엽이 빠진 자리가 남아 있습니다.", "선물을 전하면 노엘의 기억을 지킬 수 있습니다. 선물을 태엽으로 쓰면 시간은 곧바로 돌아오지만 노엘의 기억은 사라집니다.");
         _inventory.Visible = false;
         _scene.SceneImage = _images["ribbon-loom.png"];
         AtmosphereCard choice = CreateAtmosphereCard(
-            "마리가 어린 시절 쓴 카드",
-            "상자 안에는 장난감도 보석도 없었다.\n\n“미래의 나에게. 기다리는 마음을 잊지 않기를.”",
+            "선물에 붙어 있는 엘리아스의 카드",
+            "“노엘 애스터에게. 너를 잊지 않았단다.”\n\n굴뚝으로, 자정에, 북쪽 하늘의 빛을 따라.\n되찾은 기억들이 마지막 배달의 길을 가리킵니다.\n이 선물을 노엘에게 전할까요, 별시계의 태엽으로 쓸까요?",
             AtmosphereCardStyle.Speech,
             new Rectangle(260, 55, 880, 320),
             new Rectangle(55, 38, 770, 54),
@@ -2017,7 +2023,7 @@ internal sealed partial class GameForm : Form
             14);
         choice.Name = "ChoiceSpeech";
         _scene.Controls.Add(choice);
-        AddAction("choice_gift", "선물을 마리에게 전달한다", new Rectangle(220, 420, 420, 78), (_, _) => ShowEnding(EndingChoice.DeliverTheGift), 1);
+        AddAction("choice_gift", "선물을 노엘에게 전달한다", new Rectangle(220, 420, 420, 78), (_, _) => ShowEnding(EndingChoice.DeliverTheGift), 1);
         AddAction("choice_clock", "선물을 시계의 태엽으로 쓴다", new Rectangle(760, 420, 420, 78), (_, _) => ShowEnding(EndingChoice.FeedTheClock), 2);
         SaveProgressBackup(reportFailure: false);
     }
@@ -2032,8 +2038,8 @@ internal sealed partial class GameForm : Form
         bool trueEnding = choice == EndingChoice.DeliverTheGift;
         string title = trueEnding ? "진엔딩: 기다림의 수취인" : "엔딩: 정확한 크리스마스";
         string body = trueEnding
-            ? "선물이 과거의 마리에게 닿자 공방의 열세 번째 종이 울렸다. 시간은 1분 늦게 흐르기 시작했지만, 그 1분 동안 세상의 모든 잊힌 편지에 새 주소가 생겼다.\n\n시계는 시간을 맞췄고, 사람은 기다림을 기억했다."
-            : "붉은 상자는 완벽한 태엽이 되어 별시계를 움직였다. 모든 선물은 정확히 자정에 도착했다. 그러나 마리의 빈 카드에는 끝내 이름이 돌아오지 않았다.\n\n시간은 정확했지만, 누군가의 기다림은 기록되지 않았다.";
+            ? "오로라가 비추는 집의 굴뚝으로 마지막 선물이 내려갔습니다. 자정의 종을 기다리던 노엘이 상자를 받아 들자, 지워졌던 이름이 배달 명단에 돌아왔습니다.\n\n공방에서 열세 번째 종이 울렸습니다. 마을의 시간은 1분 늦게 흐르기 시작했지만, 그 짧은 틈에 잊힌 선물들은 모두 제 주인을 찾아갔습니다.\n\n노엘은 자신을 잊지 않은 누군가가 있다는 것을 오래도록 기억했습니다."
+            : "붉은 선물 상자가 빛으로 흩어져 별시계의 태엽을 채웠습니다. 시곗바늘이 다시 움직이고, 마을에는 자정을 알리는 종소리가 울려 퍼졌습니다.\n\n배달 명단에 남은 선물은 모두 제시간에 도착했습니다. 그러나 노엘의 이름은 끝내 돌아오지 않았습니다. 선물을 기다리던 아이가 있었다는 사실도 아무도 기억하지 못했습니다.\n\n마을의 시계는 정확해졌지만, 마지막 수취인은 잊히고 말았습니다.";
         _elapsedTimer.Stop();
         _gameStopwatch.Stop();
         _gameInProgress = false;
@@ -2708,7 +2714,7 @@ internal sealed partial class GameForm : Form
                 if (Math.Abs(control.Font.SizeInPoints - scaledSize) > 0.05f)
                 {
                     Font oldFont = control.Font;
-                    control.Font = Theme.Font(scaledSize, snapshot.FontStyle);
+                    control.Font = Theme.ControlFont(control, scaledSize, snapshot.FontStyle);
                     oldFont.Dispose();
                 }
             }
@@ -2772,7 +2778,7 @@ internal sealed partial class GameForm : Form
 
         if (PuzzleDone(PuzzleId.Melody))
         {
-            acquired.Add("설구 계산대: 숫자 각인 00");
+            acquired.Add("스노글로브 계산대: 숫자 각인 00");
         }
 
         if (PuzzleDone(PuzzleId.RibbonLoom))
