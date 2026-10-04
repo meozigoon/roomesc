@@ -32,7 +32,6 @@ public sealed class ProgressBackup
 
 public sealed class ProgressBackupStore
 {
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public ProgressBackupStore(string dataDirectory)
     {
@@ -57,7 +56,7 @@ public sealed class ProgressBackupStore
         try
         {
             string json = File.ReadAllText(FilePath, Encoding.UTF8);
-            ProgressBackup? loaded = JsonSerializer.Deserialize<ProgressBackup>(json, _jsonOptions);
+            ProgressBackup? loaded = JsonSerializer.Deserialize<ProgressBackup>(json, JsonFileStore.Options);
             if (loaded is null || !IsValid(loaded, out error))
             {
                 error ??= "진행 백업이 비어 있습니다.";
@@ -83,23 +82,15 @@ public sealed class ProgressBackupStore
             return false;
         }
 
-        string temporaryPath = FilePath + ".tmp";
         try
         {
-            Directory.CreateDirectory(DataDirectory);
-            string json = JsonSerializer.Serialize(backup, _jsonOptions);
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
-            File.Move(temporaryPath, FilePath, true);
+            JsonFileStore.Save(FilePath, backup);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             error = $"진행 백업을 저장하지 못했습니다: {exception.Message}";
             return false;
-        }
-        finally
-        {
-            TryDeleteTemporaryFile(temporaryPath);
         }
     }
 
@@ -176,18 +167,4 @@ public sealed class ProgressBackupStore
         return true;
     }
 
-    private static void TryDeleteTemporaryFile(string temporaryPath)
-    {
-        try
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // A stale temporary file does not invalidate an already completed save.
-        }
-    }
 }

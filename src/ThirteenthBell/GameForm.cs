@@ -29,6 +29,7 @@ internal sealed partial class GameForm : Form
     private const int BaseWidth = 1400;
     private const int BaseHeight = 820;
     private const string WorkshopImage = "workshop-desk-updated.png";
+    private const string MenuBackgroundImage = "christmas-village-aerial.png";
     private static readonly string[] SceneImagesToPreload =
     [
         "desk-closeup.png",
@@ -67,14 +68,12 @@ internal sealed partial class GameForm : Form
     private readonly Panel _topHoverZone;
     private readonly System.Windows.Forms.Timer _elapsedTimer = new() { Interval = 1000 };
     private readonly Stopwatch _gameStopwatch = new();
-    private readonly Stopwatch _screenStopwatch = new();
     private readonly SoundBank _sounds = new();
     private readonly BackgroundMusicPlayer _music;
     private readonly PlayerDataStore _playerDataStore;
     private readonly ProgressBackupStore _progressBackupStore;
     private readonly ILeaderboardService _leaderboardService;
     private readonly Dictionary<string, Button> _actions = new(StringComparer.Ordinal);
-    private readonly Dictionary<GameScreen, int> _hintSteps = [];
     private readonly Dictionary<Control, LayoutSnapshot> _baseLayout = [];
     private readonly System.Windows.Forms.Timer _narrativeFadeTimer = new() { Interval = 40 };
     private readonly System.Windows.Forms.Timer _transitionTimer = new() { Interval = 16 };
@@ -506,7 +505,6 @@ internal sealed partial class GameForm : Form
         CancelMenuWork();
         _elapsedTimer.Stop();
         _gameStopwatch.Stop();
-        _screenStopwatch.Reset();
         _screen = GameScreen.Menu;
         _hintAvailable = false;
         _hintButton.Visible = false;
@@ -516,15 +514,7 @@ internal sealed partial class GameForm : Form
         SetGameChromeVisible(false);
         _menuScene.Visible = true;
         _menuScene.BringToFront();
-        _menuScene.SceneImage = _images[WorkshopImage];
-
-        WallClockLogo logo = new()
-        {
-            Name = "MainClockLogo",
-            Bounds = new Rectangle(555, 20, 290, 320),
-            LogoImage = _images["wall-clock-logo.png"]
-        };
-        _menuScene.Controls.Add(logo);
+        _menuScene.SceneImage = _images[MenuBackgroundImage];
 
         AddMenuAction("start", "게임 시작", new Rectangle(205, 375, 400, 66), (_, _) => StartGameFromMainMenu(), 1);
         AddMenuAction("menu_guide", "게임 방법", new Rectangle(205, 455, 400, 66), (_, _) => ShowGuideMenu(), 2);
@@ -540,7 +530,7 @@ internal sealed partial class GameForm : Form
         _ = LoadLeaderboardAsync(leaderboard, _menuCancellation.Token);
 
         UpdateWindowCloseAvailability();
-        RefreshResponsiveLayout();
+        ApplyResponsiveLayout();
         BeginScreenTransition(previousFrame);
     }
 
@@ -559,7 +549,7 @@ internal sealed partial class GameForm : Form
         CancelMenuWork();
         _actions.Clear();
         DisposeChildren(_menuScene);
-        _menuScene.SceneImage = _images[WorkshopImage];
+        _menuScene.SceneImage = _images[MenuBackgroundImage];
 
         string warning = string.IsNullOrWhiteSpace(_dataWarning)
             ? string.Empty
@@ -572,7 +562,7 @@ internal sealed partial class GameForm : Form
         _menuScene.Controls.Add(card);
         string continueText = _firstRunContinuation is null ? "확인하고 메인 메뉴로" : "확인하고 닉네임 설정으로";
         AddMenuAction("tutorial_continue", continueText, new Rectangle(500, 660, 400, 70), (_, _) => CompleteFirstRunGuide(), 1);
-        RefreshResponsiveLayout();
+        ApplyResponsiveLayout();
         BeginScreenTransition(previousFrame);
     }
 
@@ -618,7 +608,7 @@ internal sealed partial class GameForm : Form
         SetGameChromeVisible(false);
         _menuScene.Visible = true;
         _menuScene.BringToFront();
-        _menuScene.SceneImage = _images[WorkshopImage];
+        _menuScene.SceneImage = _images[MenuBackgroundImage];
 
         string savedTime = backup.SavedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture);
         Label card = CreateCard(
@@ -638,7 +628,7 @@ internal sealed partial class GameForm : Form
 
         AddMenuAction("resume_load", "한 번 불러오기", new Rectangle(350, 625, 320, 70), (_, _) => LoadPendingProgress(status), 1);
         AddMenuAction("resume_discard", "불러오지 않고 삭제", new Rectangle(730, 625, 320, 70), (_, _) => DiscardPendingProgress(status), 2);
-        RefreshResponsiveLayout();
+        ApplyResponsiveLayout();
         BeginScreenTransition(previousFrame);
     }
 
@@ -687,7 +677,6 @@ internal sealed partial class GameForm : Form
         _playerData.Nickname = backup.Nickname;
         _elapsedBeforeSession = TimeSpan.FromMilliseconds(backup.ElapsedMilliseconds);
         _gameStopwatch.Restart();
-        _hintSteps.Clear();
         _treeEasterEggClicks = 0;
         _treeEasterEggFound = false;
         _gameInProgress = true;
@@ -766,14 +755,14 @@ internal sealed partial class GameForm : Form
         Bitmap? previousFrame = CaptureTransitionFrame();
         _actions.Clear();
         DisposeChildren(_menuScene);
-        _menuScene.SceneImage = _images[WorkshopImage];
+        _menuScene.SceneImage = _images[MenuBackgroundImage];
 
         Label card = CreateCard(heading, body);
         card.Bounds = new Rectangle(300, 115, 800, 480);
         card.Font = Theme.Font(fontSize, FontStyle.Regular);
         _menuScene.Controls.Add(card);
         AddMenuAction("menu_back", "메인 메뉴로 돌아가기", new Rectangle(500, 635, 400, 70), (_, _) => ShowMainMenu(), 1);
-        RefreshResponsiveLayout();
+        ApplyResponsiveLayout();
         BeginScreenTransition(previousFrame);
     }
 
@@ -827,7 +816,6 @@ internal sealed partial class GameForm : Form
         CancelMenuWork();
         _elapsedTimer.Stop();
         _gameStopwatch.Stop();
-        _screenStopwatch.Reset();
         _screen = GameScreen.Menu;
         _hintAvailable = false;
         _hintButton.Visible = false;
@@ -837,7 +825,7 @@ internal sealed partial class GameForm : Form
         SetGameChromeVisible(false);
         _menuScene.Visible = true;
         _menuScene.BringToFront();
-        _menuScene.SceneImage = _images[WorkshopImage];
+        _menuScene.SceneImage = _images[MenuBackgroundImage];
 
         Label card = CreateCard(
             "온라인 닉네임 설정",
@@ -886,7 +874,7 @@ internal sealed partial class GameForm : Form
         privacy.TextAlign = ContentAlignment.MiddleCenter;
         privacy.ForeColor = Theme.PaleGold;
         _menuScene.Controls.Add(privacy);
-        RefreshResponsiveLayout();
+        ApplyResponsiveLayout();
         editor.SelectAll();
         editor.Focus();
         BeginScreenTransition(previousFrame);
@@ -1256,7 +1244,6 @@ internal sealed partial class GameForm : Form
         _inventoryExpanded = false;
         _elapsedBeforeSession = TimeSpan.Zero;
         _gameStopwatch.Restart();
-        _hintSteps.Clear();
         _gameInProgress = true;
         _allowClose = false;
         _lastBackupWriteUtc = DateTimeOffset.MinValue;
@@ -1557,59 +1544,59 @@ internal sealed partial class GameForm : Form
 
         if (new Rectangle(1180, 35, 80, 195).Contains(point))
         {
-            observation = "나무 병정 인형이다. 한쪽 부츠에 오래된 톱밥이 붙어 있다.";
+            observation = "나무 병정 인형입니다. 한쪽 부츠에 오래된 톱밥이 붙어 있습니다.";
         }
         else if (new Rectangle(1260, 160, 120, 105).Contains(point))
         {
-            observation = "작은 흔들 목마가 놓여 있다. 나무로 깎은 갈기에 손때가 묻어 있다.";
+            observation = "작은 흔들 목마가 놓여 있습니다. 나무로 깎은 갈기에 손때가 묻어 있습니다.";
         }
         else if (new Rectangle(1350, 235, 50, 175).Contains(point))
         {
-            observation = "황동 종이다. 흔들어 보아도 소리는 나지 않고 차가운 금속 감촉만 남는다.";
+            observation = "황동 종입니다. 흔들어 보아도 소리는 나지 않고 차가운 금속 감촉만 남습니다.";
         }
         else if (new Rectangle(1160, 245, 105, 125).Contains(point))
         {
-            observation = "곰 인형이다. 오랫동안 주인을 기다린 듯 털이 조금 바래 있다.";
+            observation = "곰 인형입니다. 오랫동안 주인을 기다린 듯 털이 조금 바래 있습니다.";
         }
         else if (new Rectangle(1010, 360, 220, 165).Contains(point))
         {
-            observation = "붉은 선물 상자다. 명찰은 없고, 리본만 단단히 묶여 있다.";
+            observation = "붉은 선물 상자입니다. 명찰은 없고, 리본만 단단히 묶여 있습니다.";
         }
         else if (new Rectangle(860, 135, 290, 390).Contains(point))
         {
-            observation = "벽난로의 불은 따뜻하지만 장작은 줄어들지 않는다. 불꽃마저 같은 모습으로 멈춰 있다.";
+            observation = "벽난로의 불은 따뜻하지만 장작은 줄어들지 않습니다. 불꽃마저 같은 모습으로 멈춰 있습니다.";
         }
         else if (new Rectangle(920, 100, 205, 190).Contains(point))
         {
-            observation = "촛불 여러 개가 바람도 없이 같은 방향으로 기울어 있다.";
+            observation = "촛불 여러 개가 바람도 없이 같은 방향으로 기울어 있습니다.";
         }
         else if (new Rectangle(245, 80, 355, 315).Contains(point))
         {
-            observation = "서리 낀 창밖으로 눈 덮인 마을이 보인다. 발자국 하나 없이 고요하다.";
+            observation = "서리 낀 창밖으로 눈 덮인 마을이 보입니다. 발자국 하나 없이 고요합니다.";
         }
         else if (new Rectangle(0, 75, 120, 325).Contains(point))
         {
-            observation = "낡은 장난감들이 빼곡하다. 수리는 모두 끝났지만 아직 주인에게 돌아가지 못한 모양이다.";
+            observation = "낡은 장난감들이 빼곡합니다. 수리는 모두 끝났지만 아직 주인에게 돌아가지 못한 모양입니다.";
         }
         else if (new Rectangle(780, 75, 170, 145).Contains(point))
         {
-            observation = "전나무 가지와 붉은 열매 장식이다. 마른 잎 사이에 금빛 실 한 가닥이 걸려 있다.";
+            observation = "전나무 가지와 붉은 열매 장식입니다. 마른 잎 사이에 금빛 실 한 가닥이 걸려 있습니다.";
         }
         else if (point.Y < 190)
         {
-            observation = "높은 선반에는 완성된 장난감들이 놓여 있다. 먼지 하나 없이 깨끗하다. 시간이 멈추기 전까지 누군가 정성껏 돌본 모양이다.";
+            observation = "높은 선반에는 완성된 장난감들이 놓여 있습니다. 먼지 하나 없이 깨끗합니다. 시간이 멈추기 전까지 누군가 정성껏 돌본 모양입니다.";
         }
         else if (point.X < 410)
         {
-            observation = "작업대에는 작은 공구 자국이 겹겹이 남아 있다. 공구는 작업하던 자리에 그대로 놓여 있다.";
+            observation = "작업대에는 작은 공구 자국이 겹겹이 남아 있습니다. 공구는 작업하던 자리에 그대로 놓여 있습니다.";
         }
         else if (point.X > 1030)
         {
-            observation = "색실과 포장지가 가지런하다. 마지막 작업만 끝내지 못한 채 시간이 멈췄다.";
+            observation = "색실과 포장지가 가지런합니다. 마지막 작업만 끝내지 못한 채 시간이 멈췄습니다.";
         }
         else
         {
-            observation = "공방의 나무 바닥이다. 희미한 톱밥 자국이 별시계 쪽으로 이어진다.";
+            observation = "공방의 나무 바닥입니다. 희미한 톱밥 자국이 별시계 쪽으로 이어집니다.";
         }
 
         ShowRoomEvent(observation);
@@ -1620,7 +1607,7 @@ internal sealed partial class GameForm : Form
     {
         if (_treeEasterEggFound)
         {
-            ShowRoomEvent("작은 트리의 별이 희미하게 반짝인다. 별 아래에서 찾은 작은 쪽지가 떠오른다.");
+            ShowRoomEvent("작은 트리의 별이 희미하게 반짝입니다. 별 아래에서 찾은 작은 쪽지가 떠오릅니다.");
             PlaySound(GameSound.NoteStar);
             return;
         }
@@ -1628,11 +1615,11 @@ internal sealed partial class GameForm : Form
         _treeEasterEggClicks++;
         ShowRoomEvent(_treeEasterEggClicks switch
         {
-            1 => "작은 크리스마스 트리 장식이다. 꼭대기의 별 장식이 눈에 띈다.",
-            2 => "트리를 다시 건드리자 꼭대기의 별이 아주 조금 흔들렸다.",
-            3 => "별 아래에 접힌 종잇조각이 보인다. 손끝에는 닿지 않는다.",
-            4 => "한 번만 더 건드리면 종잇조각이 떨어질 것 같다.",
-            _ => "[숨겨진 기록] 별 장식에서 작은 쪽지가 떨어졌다. ‘찾아줘서 고마워. 열세 번째 종은 호기심 많은 사람에게만 들린단다.’"
+            1 => "작은 크리스마스 트리 장식입니다. 꼭대기의 별 장식이 눈에 띕니다.",
+            2 => "트리를 다시 건드리자 꼭대기의 별이 아주 조금 흔들렸습니다.",
+            3 => "별 아래에 접힌 종잇조각이 보입니다. 손끝에는 닿지 않습니다.",
+            4 => "한 번만 더 건드리면 종잇조각이 떨어질 것 같습니다.",
+            _ => "[숨겨진 기록] 별 장식에서 작은 쪽지가 떨어졌습니다. ‘찾아줘서 고마워. 열세 번째 종은 호기심 많은 사람에게만 들린단다.’"
         });
 
         if (_treeEasterEggClicks >= 5)
@@ -1679,12 +1666,7 @@ internal sealed partial class GameForm : Form
                 return;
             }
 
-            _state.RecordFailure();
-            editor.Clear();
-            editor.Focus();
-            ShowNarrativeMessage("금고가 열리지 않습니다. 숫자의 규칙과 입력한 답을 다시 확인하세요.");
-            PlaySound(GameSound.Wrong);
-            SaveProgressBackup(reportFailure: false);
+            RejectTextPuzzle(editor, "금고가 열리지 않습니다. 숫자의 규칙과 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("frost_vault_confirm", "금고 열기", new Rectangle(730, 395, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1731,12 +1713,7 @@ internal sealed partial class GameForm : Form
                 return;
             }
 
-            _state.RecordFailure();
-            editor.Clear();
-            editor.Focus();
-            ShowNarrativeMessage("계산판의 불빛이 꺼졌습니다. 식과 입력한 답을 다시 확인하세요.");
-            PlaySound(GameSound.Wrong);
-            SaveProgressBackup(reportFailure: false);
+            RejectTextPuzzle(editor, "계산판의 불빛이 꺼졌습니다. 식과 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("ornament_equation_confirm", "계산판 켜기", new Rectangle(730, 440, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1776,13 +1753,6 @@ internal sealed partial class GameForm : Form
             _scene.Controls.Add(slot);
         }
 
-        Color[] colors =
-        [
-            Color.FromArgb(196, 139, 35),
-            Color.FromArgb(21, 105, 60),
-            Color.FromArgb(174, 31, 39),
-            Color.FromArgb(24, 82, 164)
-        ];
         string[] tags = ["1", "2", "2", "5"];
         string[] names = ["노랑", "초록", "빨강", "파랑"];
         int[] initialOrder = [0, 1, 2, 3];
@@ -1796,7 +1766,7 @@ internal sealed partial class GameForm : Form
         for (int position = 0; position < initialOrder.Length; position++)
         {
             int index = initialOrder[position];
-            StockingPiece piece = new(index, colors[index], tags[index], stockingSprites)
+            StockingPiece piece = new(index, tags[index], stockingSprites)
             {
                 Name = $"StockingPiece{index}",
                 Bounds = new Rectangle(285 + (position * 210), 355, 118, 154),
@@ -2059,7 +2029,7 @@ internal sealed partial class GameForm : Form
             title,
             body,
             AtmosphereCardStyle.Letter,
-            new Rectangle(190, 25, 1020, 410),
+            new Rectangle(190, 65, 1020, 410),
             new Rectangle(65, 34, 890, 58),
             new Rectangle(78, 105, 864, 220),
             19,
@@ -2068,7 +2038,7 @@ internal sealed partial class GameForm : Form
         _scene.Controls.Add(ending);
         AddAction("restart", "새 닉네임으로 다시 시작", new Rectangle(340, 485, 350, 60), (_, _) => ShowNicknameSetup(), 1);
         AddAction("ending_menu", "메인으로 돌아가기", new Rectangle(730, 485, 330, 60), (_, _) => ShowMainMenu(), 2);
-        _ = SubmitOnlineClearAsync(choice, CancellationToken.None);
+        _ = SubmitOnlineClearAsync(choice, _sceneCancellation.Token);
         PlaySound(GameSound.EndingBell);
     }
 
@@ -2200,7 +2170,6 @@ internal sealed partial class GameForm : Form
             MarkInspected(inspected);
         }
         _scene.Cursor = screen is GameScreen.Room or GameScreen.Desk ? Cursors.Hand : Cursors.Default;
-        _screenStopwatch.Restart();
         _hintAvailable = screen is not GameScreen.Intro and not GameScreen.Ending;
         _actions.Clear();
         _menuScene.Visible = false;
@@ -2628,7 +2597,7 @@ internal sealed partial class GameForm : Form
                     _layoutPending = false;
                     if (!IsDisposed && !Disposing)
                     {
-                        RefreshResponsiveLayout();
+                        ApplyResponsiveLayout();
                     }
                 }));
             }
@@ -2638,11 +2607,6 @@ internal sealed partial class GameForm : Form
                 // The form can lose its handle while a screen transition is closing it.
             }
         }
-    }
-
-    private void RefreshResponsiveLayout()
-    {
-        ApplyResponsiveLayout();
     }
 
     private void CaptureNewControls(Control parent, ICollection<Control> captured)
@@ -2899,7 +2863,6 @@ internal sealed partial class GameForm : Form
 
     private void ClearSessionMemo()
     {
-        _hintSteps.Clear();
         _inspectedLocations.Clear();
         _treeEasterEggClicks = 0;
         _treeEasterEggFound = false;
@@ -3021,6 +2984,20 @@ internal sealed partial class GameForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (_confirmationOverlay is not null)
+        {
+            if (keyData == Keys.Escape)
+            {
+                CloseConfirmationOverlay();
+                return true;
+            }
+
+            if (keyData is Keys.F1 or (Keys.Control | Keys.N) or (Keys.Alt | Keys.F4))
+            {
+                return true;
+            }
+        }
+
         if (keyData == (Keys.Alt | Keys.F4))
         {
             Close();
@@ -3072,7 +3049,6 @@ internal sealed partial class GameForm : Form
         _chromeHoverTimer.Stop();
         _startupFadeTimer.Stop();
         _gameStopwatch.Stop();
-        _screenStopwatch.Stop();
         _sceneCancellation.Cancel();
         _menuCancellation.Cancel();
     }

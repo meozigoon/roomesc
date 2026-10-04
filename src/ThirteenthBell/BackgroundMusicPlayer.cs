@@ -40,7 +40,7 @@ internal sealed class BackgroundMusicPlayer : IDisposable
         get => _enabled;
         set
         {
-            if (_enabled == value)
+            if (_disposed || _enabled == value)
             {
                 return;
             }
@@ -76,6 +76,11 @@ internal sealed class BackgroundMusicPlayer : IDisposable
 
     public void Play(BackgroundMusicKind kind)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (_requestedKind == kind
             && (!_playbackAvailable
                 || !_enabled
@@ -328,15 +333,22 @@ internal sealed class BackgroundMusicPlayer : IDisposable
         public override int Read(Span<byte> buffer)
         {
             int totalRead = 0;
+            bool restarted = false;
             while (totalRead < buffer.Length)
             {
                 int read = _source.Read(buffer[totalRead..]);
                 if (read == 0)
                 {
+                    if (restarted)
+                    {
+                        break;
+                    }
                     _source.Position = 0;
+                    restarted = true;
                     continue;
                 }
 
+                restarted = false;
                 totalRead += read;
             }
 
@@ -348,9 +360,5 @@ internal sealed class BackgroundMusicPlayer : IDisposable
             return Read(buffer.AsSpan(offset, count));
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-        }
     }
 }

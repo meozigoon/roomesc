@@ -15,6 +15,8 @@ dotnet run --project .\src\ThirteenthBell\ThirteenthBell.csproj -c Release
 
 게임은 전체 화면으로 시작합니다. `F11`로 전체 화면과 창 모드를 전환할 수 있습니다.
 
+메인 메뉴는 눈이 쌓인 크리스마스 마을의 항공 뷰를 배경으로 표시합니다. 메뉴의 큰 시계 로고는 제거했습니다. 배경은 이미지 생성으로 제작한 `Assets\christmas-village-aerial.png`를 사용하며, 생성 프롬프트는 `Assets\MENU-ART.md`에 기록했습니다. 우편실과 공방의 배경 조사 설명은 존댓말로 표시합니다.
+
 새 게임은 ‘수취인 없는 우편실’에서 시작합니다. 가방과 선물 상자를 클릭하거나 끌어 옮겨 황동 열쇠를 찾고, 담요의 종 기록과 잠긴 서랍의 배송 기록을 조사합니다. 다섯 장소의 배송 순서와 여섯 번의 종 울림을 해결한 뒤 열쇠로 문을 열면 기존 공방으로 이어집니다.
 
 우편실 도입부와 우편실의 모든 조사 화면에서는 사용자 제공 `first_game-bgmusic.mp3`를 반복 재생합니다. 공방으로 들어가면 기존 `game-bgmusic.mp3`로 부드럽게 전환됩니다. 원본 파일은 변경 없이 `src\ThirteenthBell\Assets\Music`에 포함했습니다.
@@ -36,6 +38,8 @@ Compress-Archive -Path .\dist\ThirteenthBell\* -DestinationPath .\dist\Thirteent
 - `supabase`: 온라인 닉네임과 순위용 SQL 마이그레이션, Edge Function
 - `tools\AudioAssetBuilder`: CC0 원본 효과음을 게임용 WAV로 변환하는 도구
 - `tools\BuildLogoAssets.ps1`: 원본 PNG에서 게임 로고 PNG와 다중 크기 ICO를 만드는 도구
+- `tools\PostalRoomSmoke`: 진행, 저장 복구, 화면, 음악과 회귀 검사
+- `tools\LeaderboardSmoke.ts`: 운영 서버에 접속하지 않는 서버 요청 검사
 
 WinForms 화면은 디자이너 파일 없이 코드에서 구성합니다. 기준 해상도는 1400×820이며 현재 창에 맞춰 등비 확대 또는 축소합니다.
 
@@ -82,6 +86,22 @@ dotnet run --project .\tools\PostalRoomSmoke\PostalRoomSmoke.csproj -c Release -
 ```powershell
 dotnet run --project .\tools\PostalRoomSmoke\PostalRoomSmoke.csproj -c Release -- .\artifacts\ui-refinement --requirements
 ```
+
+전체 게임 진행과 두 결말, 저장 및 복구, 확인창 단축키를 검사하거나 잘못된 온라인 응답과 반복 오디오를 검사할 수 있습니다.
+
+```powershell
+dotnet run --project .\tools\PostalRoomSmoke -c Release -- .\artifacts\comprehensive --comprehensive
+dotnet run --project .\tools\PostalRoomSmoke -c Release -- .\artifacts\regression --regression
+```
+
+Deno가 설치되어 있다면 서버의 요청과 RPC 응답 검증을 네트워크 권한 없이 실행할 수 있습니다.
+
+```powershell
+deno check .\supabase\functions\thirteenth-bell-leaderboard\index.ts .\tools\LeaderboardSmoke.ts
+deno run --allow-env --allow-read .\tools\LeaderboardSmoke.ts
+```
+
+확인창에서 Esc는 확인창만 닫으며 F1과 Ctrl+N은 뒤쪽 게임 상태를 변경하지 않습니다. 같은 배경을 다시 표시할 때는 크기가 바뀌지 않았다면 캐시를 유지합니다. 사용자 데이터와 진행 백업은 공통 임시 파일 저장 처리로 기록합니다. 빌드와 게시 결과에는 프로젝트 LICENSE도 포함합니다.
 
 마우스 입력 구현에 참고한 Microsoft 공식 문서 (한국어와 영어 검색으로 확인):
 

@@ -195,9 +195,23 @@ internal static partial class PostalRoomSmoke
             Click(form, "completion_return");
             Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " reopened return reaches parent");
             Call(form, item.Open);
-            Call(form, "SetHeaderRevealed", true);
-            Get<Button>(form, "_roomButton").PerformClick();
-            Pump();
+            System.Windows.Forms.Timer hoverTimer = Get<System.Windows.Forms.Timer>(form, "_chromeHoverTimer");
+            bool hoverWasEnabled = hoverTimer.Enabled;
+            hoverTimer.Stop();
+            try
+            {
+                Call(form, "SetHeaderRevealed", true);
+                Check(Get<Button>(form, "_roomButton").Visible, item.Puzzle + " toolbar return available");
+                Get<Button>(form, "_roomButton").PerformClick();
+                Pump();
+            }
+            finally
+            {
+                if (hoverWasEnabled)
+                {
+                    hoverTimer.Start();
+                }
+            }
             Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " toolbar return reaches parent");
             Call(form, item.Open);
             Call(form, "ProcessCmdKey", new Message(), Keys.Escape);

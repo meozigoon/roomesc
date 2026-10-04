@@ -26,6 +26,11 @@ internal sealed class SceneCanvas : Panel
         get => _sceneImage;
         set
         {
+            if (ReferenceEquals(_sceneImage, value))
+            {
+                return;
+            }
+
             _sceneImage = value;
             ClearBackdrop();
             Invalidate(true);

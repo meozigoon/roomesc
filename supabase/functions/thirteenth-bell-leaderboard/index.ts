@@ -17,6 +17,10 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function callRpc(
   projectUrl: string,
   serviceRoleKey: string,
@@ -86,11 +90,15 @@ Deno.serve(async (request: Request) => {
       return jsonResponse(400, { error: "invalid_request_body" });
     }
 
-    let payload: Record<string, unknown>;
+    let payload: unknown;
     try {
-      payload = JSON.parse(rawBody) as Record<string, unknown>;
+      payload = JSON.parse(rawBody);
     } catch {
       return jsonResponse(400, { error: "invalid_json" });
+    }
+
+    if (!isObject(payload)) {
+      return jsonResponse(400, { error: "invalid_request_body" });
     }
 
     if (payload.action === "reserve") {
@@ -102,12 +110,12 @@ Deno.serve(async (request: Request) => {
         p_nickname: payload.nickname,
         p_claim_token_hash: payload.claimTokenHash,
       });
-      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1) {
+      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1 || !isObject(rpc.data[0])) {
         console.error("Nickname reservation RPC failed", rpc.status, rpc.data);
         return jsonResponse(502, { error: "reservation_failed" });
       }
 
-      const row = rpc.data[0] as Record<string, unknown>;
+      const row = rpc.data[0];
       if (row.result === "nickname_taken") {
         return jsonResponse(409, { error: "nickname_taken" });
       }
@@ -128,12 +136,12 @@ Deno.serve(async (request: Request) => {
         p_claim_token_hash: payload.claimTokenHash,
         p_ending: payload.ending,
       });
-      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1) {
+      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1 || !isObject(rpc.data[0])) {
         console.error("Clear submission RPC failed", rpc.status, rpc.data);
         return jsonResponse(502, { error: "submission_failed" });
       }
 
-      const row = rpc.data[0] as Record<string, unknown>;
+      const row = rpc.data[0];
       if (row.result !== "saved") {
         return jsonResponse(400, { error: row.result ?? "invalid_submission" });
       }

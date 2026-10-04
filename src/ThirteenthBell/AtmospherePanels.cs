@@ -259,14 +259,16 @@ internal sealed class AtmosphereCard : Panel
         graphics.DrawRectangle(edge, bounds);
         graphics.DrawRectangle(inner, Rectangle.Inflate(bounds, -12, -12));
 
-        int sealSize = Math.Max(26, Math.Min(52, bounds.Height / 8));
-        Rectangle seal = new(bounds.Right - sealSize - 24, bounds.Bottom - sealSize - 20, sealSize, sealSize);
+        // Keep the seal inside the card's right margin, outside its text bounds.
+        int sealSize = Math.Clamp(bounds.Width / 35, 12, 20);
+        Rectangle seal = new(bounds.Right - sealSize - 4, bounds.Bottom - sealSize - 20, sealSize, sealSize);
         using SolidBrush wax = new(Theme.Cranberry);
         using Pen waxEdge = new(Color.FromArgb(93, 23, 33), 1.5f);
         graphics.FillEllipse(wax, seal);
         graphics.DrawEllipse(waxEdge, seal);
-        graphics.DrawLine(waxEdge, seal.Left + (sealSize / 2), seal.Top + 10, seal.Left + (sealSize / 2), seal.Bottom - 10);
-        graphics.DrawLine(waxEdge, seal.Left + 10, seal.Top + (sealSize / 2), seal.Right - 10, seal.Top + (sealSize / 2));
+        int inset = sealSize / 4;
+        graphics.DrawLine(waxEdge, seal.Left + (sealSize / 2), seal.Top + inset, seal.Left + (sealSize / 2), seal.Bottom - inset);
+        graphics.DrawLine(waxEdge, seal.Left + inset, seal.Top + (sealSize / 2), seal.Right - inset, seal.Top + (sealSize / 2));
     }
 
     private static void DrawSpeech(Graphics graphics, Rectangle bounds)

@@ -34,6 +34,13 @@ internal static partial class PostalRoomSmoke
                 CheckRules();
             }
             bool performance = args.Contains("--performance", StringComparer.Ordinal);
+            if (args.Contains("--regression", StringComparer.Ordinal))
+            {
+                CheckRegressionsAsync().GetAwaiter().GetResult();
+                CheckAudioLoopRegression();
+                Console.WriteLine($"REGRESSION_OK checks={_checks}");
+                return 0;
+            }
             Stopwatch startup = Stopwatch.StartNew();
             using GameForm form = new(new OfflineLeaderboard(), animationsEnabled: performance, audioEnabled: false);
             form.WindowState = FormWindowState.Normal;
@@ -43,6 +50,18 @@ internal static partial class PostalRoomSmoke
             Set(form, "_soundEnabled", false);
             form.Show();
             PumpUntil(() => Get<bool>(form, "_startupSequenceCompleted"), TimeSpan.FromSeconds(30));
+            if (args.Contains("--menu-presentation", StringComparer.Ordinal))
+            {
+                CheckMenuPresentation(form);
+                return 0;
+            }
+            if (args.Contains("--comprehensive", StringComparer.Ordinal))
+            {
+                CheckComprehensive(form);
+                File.WriteAllText(Path.Combine(_output, "comprehensive-result.json"), JsonSerializer.Serialize(new { passed = Findings.Count == 0, checks = _checks, failed = Findings.Count, network = "offline stub", data = "isolated" }, ResultJsonOptions));
+                Console.WriteLine($"COMPREHENSIVE_COMPLETED passedChecks={_checks} failedChecks={Findings.Count}");
+                return Findings.Count == 0 ? 0 : 1;
+            }
             if (performance)
             {
                 double startupMs = startup.Elapsed.TotalMilliseconds;

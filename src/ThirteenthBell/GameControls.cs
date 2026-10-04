@@ -362,10 +362,9 @@ internal sealed class StockingPiece : Control
     private bool _dragging;
     private Point _grabOffset;
 
-    public StockingPiece(int stockingId, Color stockingColor, string tagText, Image stockingImage)
+    public StockingPiece(int stockingId, string tagText, Image stockingImage)
     {
         StockingId = stockingId;
-        StockingColor = stockingColor;
         TagText = tagText;
         StockingImage = stockingImage;
         SetStyle(ControlStyles.SupportsTransparentBackColor
@@ -380,8 +379,6 @@ internal sealed class StockingPiece : Control
     }
 
     public int StockingId { get; }
-
-    public Color StockingColor { get; }
 
     public string TagText { get; }
 

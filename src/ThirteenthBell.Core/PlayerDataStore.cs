@@ -15,7 +15,6 @@ public sealed class PlayerData
 public sealed class PlayerDataStore
 {
     private const string DataDirectoryEnvironmentVariable = "THIRTEENTH_BELL_DATA_DIR";
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public PlayerDataStore(string dataDirectory)
     {
@@ -49,7 +48,7 @@ public sealed class PlayerDataStore
         try
         {
             string json = File.ReadAllText(FilePath, Encoding.UTF8);
-            PlayerData? loaded = JsonSerializer.Deserialize<PlayerData>(json, _jsonOptions);
+            PlayerData? loaded = JsonSerializer.Deserialize<PlayerData>(json, JsonFileStore.Options);
             if (loaded is null)
             {
                 error = "저장된 사용자 데이터가 비어 있어 기본값으로 시작합니다.";
@@ -73,34 +72,16 @@ public sealed class PlayerDataStore
     {
         ArgumentNullException.ThrowIfNull(data);
         error = null;
-        string temporaryPath = FilePath + ".tmp";
 
         try
         {
-            Directory.CreateDirectory(DataDirectory);
-            string json = JsonSerializer.Serialize(data, _jsonOptions);
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
-            File.Move(temporaryPath, FilePath, true);
+            JsonFileStore.Save(FilePath, data);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             error = $"사용자 데이터를 저장하지 못했습니다: {exception.Message}";
             return false;
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(temporaryPath))
-                {
-                    File.Delete(temporaryPath);
-                }
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // A stale temporary file does not invalidate an already completed save.
-            }
         }
     }
 }

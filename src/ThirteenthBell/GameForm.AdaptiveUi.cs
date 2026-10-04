@@ -270,7 +270,14 @@ internal sealed partial class GameForm
             (PuzzleId.ToyCipher, GameScreen.ToyCipher, "장난감 암호: 제목에 등장하는 종의 번호를 다시 읽어 보세요."),
             (PuzzleId.StarChart, GameScreen.StarChart, "별자리 도면: 기록에 적힌 걸음의 방향을 생각해 보세요.")
         ];
-        foreach ((PuzzleId puzzle, GameScreen screen, string hint) in puzzles.OrderBy(item => item.Screen == _screen ? 0 : 1))
+        foreach ((PuzzleId puzzle, GameScreen screen, string hint) in puzzles)
+        {
+            if (screen == _screen && !PuzzleDone(puzzle))
+            {
+                return hint;
+            }
+        }
+        foreach ((PuzzleId puzzle, _, string hint) in puzzles)
         {
             if (!PuzzleDone(puzzle))
             {

@@ -9,8 +9,6 @@ internal static class Theme
 
     public static readonly Color Panel = Color.FromArgb(24, 35, 46);
 
-    public static readonly Color PanelLight = Color.FromArgb(37, 51, 63);
-
     public static readonly Color Gold = Color.FromArgb(222, 177, 82);
 
     public static readonly Color PaleGold = Color.FromArgb(246, 222, 163);
@@ -20,8 +18,6 @@ internal static class Theme
     public static readonly Color Cranberry = Color.FromArgb(145, 38, 50);
 
     public static readonly Color Pine = Color.FromArgb(37, 94, 73);
-
-    public static string FontFamilyName => _fontFamily?.Name ?? FontFamily.GenericSerif.Name;
 
     public static void Initialize()
     {

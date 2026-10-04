@@ -49,15 +49,17 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         public string PublishableKey { get; set; } = string.Empty;
     }
 
-    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(12) };
+    private readonly HttpClient _httpClient;
     private readonly PlayerData _playerData;
     private readonly Uri? _functionUri;
     private readonly string _publishableKey = string.Empty;
     private readonly string? _configurationError;
 
-    public SupabaseLeaderboardService(PlayerData playerData)
+    public SupabaseLeaderboardService(PlayerData playerData, HttpMessageHandler? handler = null)
     {
         _playerData = playerData ?? throw new ArgumentNullException(nameof(playerData));
+        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient.Timeout = TimeSpan.FromSeconds(12);
         try
         {
             string path = Path.Combine(AppContext.BaseDirectory, "Assets", "online-config.json");
@@ -101,7 +103,8 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             using JsonDocument document = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (!document.RootElement.TryGetProperty("entries", out JsonElement entriesElement)
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("entries", out JsonElement entriesElement)
                 || entriesElement.ValueKind != JsonValueKind.Array)
             {
                 return new LeaderboardLoadResult([], "온라인 순위 응답 형식이 올바르지 않습니다.");
@@ -110,8 +113,11 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             List<LeaderboardEntry> entries = [];
             foreach (JsonElement entry in entriesElement.EnumerateArray())
             {
-                if (entry.TryGetProperty("nickname", out JsonElement nicknameElement)
+                if (entry.ValueKind == JsonValueKind.Object
+                    && entry.TryGetProperty("nickname", out JsonElement nicknameElement)
                     && entry.TryGetProperty("clear_time_ms", out JsonElement timeElement)
+                    && nicknameElement.ValueKind == JsonValueKind.String
+                    && timeElement.ValueKind == JsonValueKind.Number
                     && nicknameElement.GetString() is string nickname
                     && timeElement.TryGetInt64(out long milliseconds)
                     && milliseconds > 0)
@@ -184,6 +190,7 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
                 return new NicknameReservationResult(NicknameReservationStatus.Unavailable, null, "닉네임 서버의 등록 승인을 확인하지 못했습니다.");
             }
             string? reservedNickname = document.RootElement.TryGetProperty("nickname", out JsonElement nicknameElement)
+                && nicknameElement.ValueKind == JsonValueKind.String
                 ? nicknameElement.GetString()
                 : null;
             if (string.IsNullOrWhiteSpace(reservedNickname)
@@ -241,10 +248,18 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             }
 
             using JsonDocument document = JsonDocument.Parse(responseText);
-            if (!document.RootElement.TryGetProperty("clearTimeMs", out JsonElement timeElement)
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("result", out JsonElement resultElement)
+                || resultElement.ValueKind != JsonValueKind.String
+                || resultElement.GetString() != "saved"
+                || !document.RootElement.TryGetProperty("clearTimeMs", out JsonElement timeElement)
+                || timeElement.ValueKind != JsonValueKind.Number
                 || !timeElement.TryGetInt64(out long milliseconds)
+                || milliseconds <= 0
                 || !document.RootElement.TryGetProperty("rank", out JsonElement rankElement)
-                || !rankElement.TryGetInt64(out long rank))
+                || rankElement.ValueKind != JsonValueKind.Number
+                || !rankElement.TryGetInt64(out long rank)
+                || rank <= 0)
             {
                 return new ScoreSubmissionResult(false, 0, 0, "클리어 기록 응답 형식이 올바르지 않습니다.");
             }

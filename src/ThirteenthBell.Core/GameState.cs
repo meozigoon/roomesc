@@ -67,6 +67,10 @@ public sealed class GameState
 
     public bool Solve(PuzzleId puzzle)
     {
+        if (!Enum.IsDefined(puzzle))
+        {
+            throw new ArgumentOutOfRangeException(nameof(puzzle));
+        }
         return _solvedPuzzles.Add(puzzle);
     }
 
@@ -94,7 +98,7 @@ public sealed class GameState
 
     public bool ChooseEnding(EndingChoice choice)
     {
-        if (!ClockRestored || choice == EndingChoice.None)
+        if (!ClockRestored || choice == EndingChoice.None || !Enum.IsDefined(choice))
         {
             return false;
         }

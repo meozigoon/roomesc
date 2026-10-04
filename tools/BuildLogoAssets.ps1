@@ -47,7 +47,6 @@ try
     try
     {
         $logo.Save((Join-Path $resolvedAssets 'wall-clock-logo.png'), [System.Drawing.Imaging.ImageFormat]::Png)
-        $logo.Save((Join-Path $resolvedAssets 'app-icon.png'), [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally
     {
