@@ -325,6 +325,12 @@ internal sealed partial class GameForm
             ShowPostalRoom();
             return;
         }
+        if (_postal.RouteSolved)
+        {
+            ShowPuzzleCompletion(GameScreen.PostalLedger, "postal-ledger.png", "배송 봉인 해제",
+                "배송 봉인이 풀렸다. ‘노엘 애스터, 기다리고 있음.’ 지워진 수취인의 이름이 다시 떠오른다. 종의 봉인도 확인하자.");
+            return;
+        }
         SetScreen(GameScreen.PostalLedger, "우편실: 마지막 배송 순서",
             "다섯 장소에 한 번씩 배달한 순서를 찾고, 봉투에 찍힌 숫자를 그 순서대로 입력하세요.",
             "순서와 봉투 숫자는 서로 다른 정보입니다. 이미 푼 배송 봉인은 다시 풀 필요가 없습니다.");
@@ -333,38 +339,35 @@ internal sealed partial class GameForm
         AddPostalText("PostalRouteRecord",
             "엘리아스의 마지막 배송 기록\n\n다리는 교회보다 정확히 두 번째 뒤에 배달한다.\n창가는 다리 바로 전에 배달한다.\n빵집은 창가 뒤에 배달하며 마지막 장소는 아니다.\n공방은 빵집보다 뒤에 배달한다.\n\n봉투의 숫자:  공방 4 / 다리 6 / 교회 8 / 빵집 1 / 창가 3",
             new Rectangle(335, 150, 755, 310), 11.5f, Color.FromArgb(64, 38, 24));
-        if (_postal.RouteSolved)
+        TextBox editor = CreatePuzzleCodeEditor("PostalRouteCode", new Rectangle(490, 590, 220, 62), 5, "배송 순서에 따른 다섯 자리 봉투 숫자");
+        _scene.Controls.Add(editor);
+        void Submit()
         {
-            AddPostalText("PostalRouteSolved", "배송 봉인 해제 완료: 지워진 마지막 수취인은 노엘 애스터였다.", new Rectangle(260, 600, 900, 50), 14, Theme.PaleGold);
-        }
-        else
-        {
-            TextBox editor = CreatePuzzleCodeEditor("PostalRouteCode", new Rectangle(490, 590, 220, 62), 5, "배송 순서에 따른 다섯 자리 봉투 숫자");
-            _scene.Controls.Add(editor);
-            void Submit()
+            if (!PostalPuzzleRules.MatchesRouteCode(editor.Text))
             {
-                if (!PostalPuzzleRules.MatchesRouteCode(editor.Text))
-                {
-                    RejectTextPuzzle(editor, "배송 순서가 기록과 맞지 않는다. 다섯 장소를 한 번씩 놓고, 그 순서대로 봉투 숫자를 읽어 보자.");
-                    return;
-                }
-                _postal.RouteSolved = true;
-                ShowPostalRoom();
-                ShowNarrativeMessage("배송 봉인이 풀렸다. ‘노엘 애스터, 기다리고 있음.’ 지워진 수취인의 이름이 다시 떠오른다. 종의 봉인도 확인하자.");
-                PlaySound(GameSound.PuzzleItem);
-                SaveProgressBackup(reportFailure: false);
+                RejectTextPuzzle(editor, "배송 순서가 기록과 맞지 않는다. 다섯 장소를 한 번씩 놓고, 그 순서대로 봉투 숫자를 읽어 보자.");
+                return;
             }
-            AddAction("postal_route_submit", "배송 봉인 풀기", new Rectangle(740, 590, 220, 62), (_, _) => Submit(), 2);
-            editor.KeyDown += (_, eventArgs) => SubmitOnEnter(eventArgs, Submit);
-            editor.Focus();
+            _postal.RouteSolved = true;
+            ShowPostalLedger();
+            PlaySound(GameSound.PuzzleItem);
+            SaveProgressBackup(reportFailure: false);
         }
+        AddAction("postal_route_submit", "배송 봉인 풀기", new Rectangle(740, 590, 220, 62), (_, _) => Submit(), 2);
+        editor.KeyDown += (_, eventArgs) => SubmitOnEnter(eventArgs, Submit);
+        editor.Focus();
     }
 
     private void ShowPostalBells()
     {
+        if (_postal.BellsSolved)
+        {
+            ShowPuzzleCompletion(GameScreen.PostalBells, "postal-bells.png", "종의 봉인 해제",
+                "여섯 번째 울림과 함께 종의 봉인이 풀렸다. 엘리아스가 남긴 말이 떠오른다. ‘멈춘 것은 배달이 아니라, 기다림을 지우려는 시간이다.’");
+            return;
+        }
         SetScreen(GameScreen.PostalBells, "우편실: 배달부의 여섯 울림",
-            _postal.BellsSolved ? "종의 봉인은 이미 풀렸다. 우편실로 돌아가 중앙 문을 확인하자."
-                : "종은 왼쪽부터 1, 2, 3, 4번이다. 배달부의 기록에 따라 여섯 번 울리고 울림을 확인하자.",
+            "종은 왼쪽부터 1, 2, 3, 4번이다. 배달부의 기록에 따라 여섯 번 울리고 울림을 확인하자.",
             _postal.BellClueFound ? "담요에서 찾은 기록을 위쪽 명판에 펼쳤습니다." : "울림 규칙이 적힌 기록이 없다. 바닥의 짐에서 단서를 찾아야 합니다.");
         UsePostalNarrativeLayout();
         _scene.SceneImage = _images["postal-bells.png"];
@@ -376,12 +379,9 @@ internal sealed partial class GameForm
             AddHotspot($"postal_bell_{bell}", $"{bell + 1}번 종 울리기", new Rectangle(bellCenters[bell] - 90, 280, 180, 220), (_, _) => RingPostalBell(selected), bell + 1, _postal.BellsSolved);
             AddPostalText($"PostalBellNumber{bell}", $"{bell + 1}번", new Rectangle(bellCenters[bell] - 35, 490, 85, 35), 13, Theme.PaleGold);
         }
-        _postalBellProgress = AddPostalText("PostalBellProgress", _postal.BellsSolved ? "종의 봉인 해제 완료" : "기록한 울림: 0 / 6", new Rectangle(400, 548, 680, 40), 14, Theme.PaleGold);
-        if (!_postal.BellsSolved)
-        {
-            AddAction("postal_bell_check", "울림 확인", new Rectangle(470, 604, 220, 58), (_, _) => CheckPostalBells(), 6);
-            AddAction("postal_bell_reset", "울림 지우기", new Rectangle(715, 604, 220, 58), (_, _) => ResetPostalBellInput(), 7);
-        }
+        _postalBellProgress = AddPostalText("PostalBellProgress", "기록한 울림: 0 / 6", new Rectangle(400, 548, 680, 40), 14, Theme.PaleGold);
+        AddAction("postal_bell_check", "울림 확인", new Rectangle(470, 604, 220, 58), (_, _) => CheckPostalBells(), 6);
+        AddAction("postal_bell_reset", "울림 지우기", new Rectangle(715, 604, 220, 58), (_, _) => ResetPostalBellInput(), 7);
     }
 
     private void RingPostalBell(int bell)
@@ -442,8 +442,7 @@ internal sealed partial class GameForm
             return;
         }
         _postal.BellsSolved = true;
-        ShowPostalRoom();
-        ShowNarrativeMessage("여섯 번째 울림과 함께 종의 봉인이 풀렸다. 엘리아스가 남긴 말이 떠오른다. ‘멈춘 것은 배달이 아니라, 기다림을 지우려는 시간이다.’");
+        ShowPostalBells();
         PlaySound(GameSound.ClockRestored);
         SaveProgressBackup(reportFailure: false);
     }
@@ -501,7 +500,7 @@ internal sealed partial class GameForm
         }
         _inventory.SolvedCount = found.Count;
         UpdateInventoryPresentation();
-        _inventoryTitle.Text = _inventoryExpanded ? "우편실 기록, 눌러서 접기" : "발견한 물건과 기록";
+        _inventoryTitle.Text = _inventoryExpanded ? "우편실 기록" : "발견한 물건과 기록";
         _inventoryText.Text = string.Join("\n", found);
         if (_inventoryExpanded)
         {

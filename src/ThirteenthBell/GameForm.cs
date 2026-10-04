@@ -285,7 +285,7 @@ internal sealed partial class GameForm : Form
         sound.AccessibleDescription = "효과음을 켜거나 끕니다";
         header.Controls.Add(sound);
 
-        Button room = Theme.CreateButton("공방으로", (_, _) => ShowRoom(), 91);
+        Button room = Theme.CreateButton("공방으로", (_, _) => ReturnFromPuzzle(), 91);
         room.Name = "RoomButton";
         room.Bounds = new Rectangle(247, 8, 180, 44);
         room.Visible = false;
@@ -1317,6 +1317,23 @@ internal sealed partial class GameForm : Form
         AddHotspot("desk_chart", PuzzleDone(PuzzleId.StarChart) ? "별자리 암호 완료" : "별자리 도면 조사", new Rectangle(120, 405, 455, 205), (_, _) => ShowStarChartPuzzle(), 3, PuzzleDone(PuzzleId.StarChart));
     }
 
+    private void ReturnFromPuzzle()
+    {
+        if (_screen is GameScreen.PostalLedger or GameScreen.PostalBells)
+        {
+            ShowPostalRoom();
+        }
+        else if (_screen is GameScreen.Letter or GameScreen.LetterAcrostic
+            or GameScreen.ToyCipher or GameScreen.StarChart)
+        {
+            ShowDesk();
+        }
+        else
+        {
+            ShowRoom();
+        }
+    }
+
     private void ShowMarieLetter()
     {
         SetScreen(GameScreen.Letter, string.Empty, string.Empty, string.Empty);
@@ -2113,7 +2130,7 @@ internal sealed partial class GameForm : Form
             PuzzleId.LetterAcrostic or PuzzleId.ToyCipher or PuzzleId.StarChart => "desk-closeup.png",
             _ => throw new ArgumentOutOfRangeException(nameof(puzzle))
         };
-        SetScreen(puzzle switch
+        GameScreen screen = puzzle switch
         {
             PuzzleId.Lanterns => GameScreen.Lanterns,
             PuzzleId.Melody => GameScreen.Melody,
@@ -2122,7 +2139,13 @@ internal sealed partial class GameForm : Form
             PuzzleId.ToyCipher => GameScreen.ToyCipher,
             PuzzleId.StarChart => GameScreen.StarChart,
             _ => throw new ArgumentOutOfRangeException(nameof(puzzle))
-        }, string.Empty, string.Empty, string.Empty);
+        };
+        ShowPuzzleCompletion(screen, imageName, title, description);
+    }
+
+    private void ShowPuzzleCompletion(GameScreen screen, string imageName, string title, string description)
+    {
+        SetScreen(screen, string.Empty, string.Empty, string.Empty);
         _narrativeFadeTimer.Stop();
         _sidebar.Visible = false;
         _scene.SceneImage = _images[imageName];
@@ -2137,7 +2160,7 @@ internal sealed partial class GameForm : Form
             13);
         card.Name = "MemoryTag";
         _scene.Controls.Add(card);
-        AddAction("completion_return", "기억 조각을 챙기고 돌아가기", new Rectangle(505, 450, 390, 64), (_, _) => ShowRoom(), 1);
+        AddAction("completion_return", "돌아가기", new Rectangle(505, 450, 390, 64), (_, _) => ReturnFromPuzzle(), 1);
     }
 
     private void SetScreen(GameScreen screen, string chapter, string notebook, string hint)
@@ -2785,7 +2808,14 @@ internal sealed partial class GameForm : Form
         {
             UpdatePostalInventory();
         }
-        _roomButton.Text = _postal.DoorOpened ? "공방으로" : "우편실로";
+        _roomButton.Text = _screen switch
+        {
+            GameScreen.PostalLedger or GameScreen.PostalBells => "우편실로",
+            GameScreen.Letter or GameScreen.LetterAcrostic
+                or GameScreen.ToyCipher or GameScreen.StarChart => "책상으로",
+            _ => _postal.DoorOpened ? "공방으로" : "우편실로"
+        };
+        _roomButton.AccessibleDescription = $"현재 화면을 나가 {_roomButton.Text} 돌아갑니다";
     }
 
     private void ToggleInventoryExpanded()
@@ -2817,7 +2847,7 @@ internal sealed partial class GameForm : Form
         SetBaseBounds(_inventoryTitle, new Rectangle(18, 8, _inventoryExpanded ? 300 : 264, 42));
         SetBaseBounds(_inventoryText, new Rectangle(18, 48, 1000, 58));
         _inventoryTitle.Text = _inventoryExpanded
-            ? "획득한 기억, 눌러서 접기"
+            ? "획득한 기억"
             : "획득한 기억, 눌러서 보기";
         _inventoryText.Visible = _inventoryExpanded;
         _inventory.Invalidate();
@@ -3009,17 +3039,12 @@ internal sealed partial class GameForm : Form
             return true;
         }
 
-        if (keyData == Keys.Escape && _screen is GameScreen.PostalLedger or GameScreen.PostalBells)
-        {
-            ShowPostalRoom();
-            return true;
-        }
-
-        if (keyData == Keys.Escape && _screen is GameScreen.Desk or GameScreen.Letter
+        if (keyData == Keys.Escape && _screen is GameScreen.PostalLedger or GameScreen.PostalBells
+            or GameScreen.Desk or GameScreen.Letter
             or GameScreen.Lanterns or GameScreen.Melody or GameScreen.RibbonLoom
             or GameScreen.LetterAcrostic or GameScreen.ToyCipher or GameScreen.StarChart or GameScreen.Clock)
         {
-            ShowRoom();
+            ReturnFromPuzzle();
             return true;
         }
 

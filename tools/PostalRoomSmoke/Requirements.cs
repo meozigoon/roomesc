@@ -117,7 +117,63 @@ internal static partial class PostalRoomSmoke
             Click(form, "ending_menu");
             Check(Get<GameScreen>(form, "_screen") == GameScreen.Menu && Get<SceneCanvas>(form, "_menuScene").Visible, "ending returns to main menu " + ending);
         }
+        CheckCompletionNavigation(form);
         CheckNicknameUi();
+    }
+
+    private static void CheckCompletionNavigation(GameForm form)
+    {
+        Set(form, "_postal", PostalRoomProgress.CompletedLegacyRoom());
+        Set(form, "_state", new GameState());
+        (PuzzleId Puzzle, string Open, GameScreen Screen, GameScreen Parent)[] cases =
+        [
+            (PuzzleId.Lanterns, "ShowLanternPuzzle", GameScreen.Lanterns, GameScreen.Room),
+            (PuzzleId.Melody, "ShowSnowglobePuzzle", GameScreen.Melody, GameScreen.Room),
+            (PuzzleId.RibbonLoom, "ShowStockingPuzzle", GameScreen.RibbonLoom, GameScreen.Room),
+            (PuzzleId.LetterAcrostic, "ShowLetterAcrosticPuzzle", GameScreen.LetterAcrostic, GameScreen.Desk),
+            (PuzzleId.ToyCipher, "ShowToyCipherPuzzle", GameScreen.ToyCipher, GameScreen.Desk),
+            (PuzzleId.StarChart, "ShowStarChartPuzzle", GameScreen.StarChart, GameScreen.Desk)
+        ];
+        foreach (var item in cases)
+        {
+            Call(form, item.Parent == GameScreen.Desk ? "ShowDesk" : "ShowRoom");
+            Call(form, item.Open);
+            Call(form, "CompletePuzzle", item.Puzzle, "기억 조각", "완료 문구를 읽고 돌아가기를 누르세요.");
+            Check(Get<GameScreen>(form, "_screen") == item.Screen, item.Puzzle + " completion stays at puzzle");
+            Check(!Get<System.Windows.Forms.Timer>(form, "_narrativeFadeTimer").Enabled, item.Puzzle + " completion has no fade timer");
+            Check(form.Controls.Find("MemoryTag", true).Single().Visible, item.Puzzle + " completion card visible");
+            Click(form, "completion_return");
+            Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " first return reaches parent");
+            Call(form, item.Open);
+            Check(Get<GameScreen>(form, "_screen") == item.Screen, item.Puzzle + " solved puzzle can be reopened");
+            Click(form, "completion_return");
+            Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " reopened return reaches parent");
+            Call(form, item.Open);
+            Call(form, "SetHeaderRevealed", true);
+            Get<Button>(form, "_roomButton").PerformClick();
+            Pump();
+            Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " toolbar return reaches parent");
+            Call(form, item.Open);
+            Call(form, "ProcessCmdKey", new Message(), Keys.Escape);
+            Check(Get<GameScreen>(form, "_screen") == item.Parent, item.Puzzle + " Escape return reaches parent");
+            if (item.Parent == GameScreen.Desk)
+            {
+                Call(form, "ReturnFromPuzzle");
+                Check(Get<GameScreen>(form, "_screen") == GameScreen.Room, item.Puzzle + " next return leaves desk");
+            }
+        }
+        Call(form, "ShowRoom");
+        Set(form, "_inventoryExpanded", true);
+        Call(form, "UpdateInventory");
+        Check(Get<Label>(form, "_inventoryTitle").Text == "획득한 기억", "expanded memories omit collapse instruction");
+        foreach (string method in new[] { "ShowPostalLedger", "ShowPostalBells" })
+        {
+            Call(form, method);
+            Check(Get<Label>(form, "_inventoryTitle").Text == "우편실 기록", "expanded postal records omit collapse instruction");
+            Check(form.Controls.Find("MemoryTag", true).Single().Visible, method + " reopened completion visible");
+            Click(form, "completion_return");
+            Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalRoom, method + " reopened return reaches postal room");
+        }
     }
 
     private static void CheckGuideButton(GameForm form)

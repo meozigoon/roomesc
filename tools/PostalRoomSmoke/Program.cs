@@ -195,6 +195,10 @@ internal static partial class PostalRoomSmoke
             code.Text = "83614";
             Click(form, "postal_route_submit");
             Check(Get<PostalRoomProgress>(form, "_postal").RouteSolved, "correct route unlocks first seal");
+            Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalLedger, "route completion stays in ledger until return");
+            Check(!Get<System.Windows.Forms.Timer>(form, "_narrativeFadeTimer").Enabled, "route completion message stays visible");
+            Click(form, "completion_return");
+            Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalRoom, "route return exits to postal room");
             Click(form, "postal_door");
             Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalRoom, "second seal still required");
             Click(form, "postal_bells");
@@ -221,6 +225,10 @@ internal static partial class PostalRoomSmoke
             Capture(form, "06-six-bell-notes");
             Click(form, "postal_bell_check");
             Check(Get<PostalRoomProgress>(form, "_postal").CanOpenDoor, "all door prerequisites met");
+            Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalBells, "bell completion stays at bells until return");
+            Check(!Get<System.Windows.Forms.Timer>(form, "_narrativeFadeTimer").Enabled, "bell completion message stays visible");
+            Click(form, "completion_return");
+            Check(Get<GameScreen>(form, "_screen") == GameScreen.PostalRoom, "bell return exits to postal room");
 
             Call(form, "SaveProgressBackup", false);
             Check(backupStore.TryLoad(out ProgressBackup? saved, out _) && saved?.Postal?.CanOpenDoor == true, "postal prerequisites persist");
