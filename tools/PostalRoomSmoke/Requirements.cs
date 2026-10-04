@@ -130,8 +130,41 @@ internal static partial class PostalRoomSmoke
             Click(form, "ending_menu");
             Check(Get<GameScreen>(form, "_screen") == GameScreen.Menu && Get<SceneCanvas>(form, "_menuScene").Visible, "ending returns to main menu " + ending);
         }
+        CheckSelectedPuzzleChanges(form);
         CheckCompletionNavigation(form);
         CheckNicknameUi();
+    }
+
+    private static void CheckSelectedPuzzleChanges(GameForm form)
+    {
+        Set(form, "_postal", PostalRoomProgress.CompletedLegacyRoom());
+        Set(form, "_state", new GameState());
+        Call(form, "ShowSnowglobePuzzle");
+        TextBox equationInput = (TextBox)form.Controls.Find("OrnamentEquationCode", true).Single();
+        equationInput.Text = "60";
+        Click(form, "ornament_equation_confirm");
+        Check(!Get<GameState>(form, "_state").SolvedPuzzles.Contains(PuzzleId.Melody), "old ornament answer rejected");
+        equationInput.Text = "44";
+        Click(form, "ornament_equation_confirm");
+        Check(Get<GameState>(form, "_state").SolvedPuzzles.Contains(PuzzleId.Melody), "new ornament answer completes puzzle");
+        Check(((AtmosphereCard)form.Controls.Find("MemoryTag", true).Single()).BodyLabel.Text.Contains("00", StringComparison.Ordinal), "ornament memory keeps clock minute");
+        Click(form, "completion_return");
+        Check(Get<GameScreen>(form, "_screen") == GameScreen.Room, "ornament completion returns to workshop");
+
+        Call(form, "ShowLetterAcrosticPuzzle");
+        AtmosphereCard record = (AtmosphereCard)form.Controls.Find("LetterAcrosticRecord", true).Single();
+        string decoded = string.Concat(record.BodyLabel.Text.Split('\n')
+            .Select(line => line.Split('/', StringSplitOptions.TrimEntries))
+            .Where(parts => parts.Length == 3 && int.TryParse(parts[0], out _))
+            .OrderBy(parts => int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture))
+            .Select(parts => parts[1][int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) - 1]));
+        Check(decoded == "CHIMNEY", "displayed letter fragments decode to chimney");
+        TextBox letterInput = (TextBox)form.Controls.Find("LetterAcrosticCode", true).Single();
+        letterInput.Text = decoded;
+        Click(form, "letter_acrostic_confirm");
+        Check(Get<GameState>(form, "_state").SolvedPuzzles.Contains(PuzzleId.LetterAcrostic), "decoded letter completes puzzle");
+        Click(form, "completion_return");
+        Check(Get<GameScreen>(form, "_screen") == GameScreen.Desk, "letter completion returns to desk");
     }
 
     private static void CheckCompletionNavigation(GameForm form)

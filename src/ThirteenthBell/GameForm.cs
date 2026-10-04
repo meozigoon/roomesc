@@ -1350,7 +1350,7 @@ internal sealed partial class GameForm : Form
 
         AtmosphereCard letter = CreateAtmosphereCard(
             "마리 벨이 남긴 편지",
-            "Candle — 촛불 아래에서 배달 명단을 펼쳤을 때, 노엘의 이름이 흐려지고 있었다.\nHearth — 벽난로 곁에서 엘리아스는 마지막 선물만은 꼭 전하겠다고 말했다.\nIcicle — 고드름처럼 차가워진 잉크가 노엘의 이름을 조금씩 지워 갔다.\nMidnight — 자정을 알리는 종이 울리기 전에 노엘의 기억을 되찾아야 한다.\nNorth — 북쪽 창밖의 빛을 따라가면 노엘의 집을 찾을 수 있다.\nEnvelope — 이 봉투에는 엘리아스가 남긴 배달 통로를 숨겨 두었다.\nYear — 해마다 선물을 기다리는 아이에게 올해도 누군가 찾아가기를.\n\n첫 글자들이 가리키는 길을 찾아, 노엘에게 마지막 선물을 전해 주세요.\n시계공 마리 벨",
+            "노엘에게 마지막 선물을 전할 통로를 일곱 종잇조각에 나누어 숨겼습니다.\n조각마다 번호와 영어 단어, 바늘땀이 남아 있습니다.\n\n각 단어의 왼쪽에서 바늘땀 수만큼 세어 글자 하나를 골라 주세요.\n첫 글자는 1번째입니다. 고른 글자를 조각 번호 1번부터 7번까지 순서대로 읽으면\n엘리아스가 남긴 배달 통로를 찾을 수 있습니다.\n\n노엘이 기다리는 선물이 무사히 닿기를 바랍니다.\n시계공 마리 벨",
             AtmosphereCardStyle.Letter,
             new Rectangle(170, 20, 1060, 535),
             new Rectangle(60, 30, 940, 55),
@@ -1401,15 +1401,15 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.LetterAcrostic))
         {
-            ShowSolvedMessage(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "일곱 줄의 첫 글자가 CHIMNEY, 굴뚝을 가리킵니다. 엘리아스가 남긴 마지막 배달 통로를 찾았습니다.");
+            ShowSolvedMessage(PuzzleId.LetterAcrostic, "네 번째 기억 조각", "바늘땀으로 고른 글자를 조각 번호순으로 읽으니 CHIMNEY, 굴뚝이 되었습니다. 엘리아스가 남긴 마지막 배달 통로를 찾았습니다.");
             return;
         }
 
-        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "마리의 편지에서 일곱 영어 단어를 옮겨 적었습니다. 숨겨진 배달 통로의 이름을 영어로 입력하세요.", string.Empty);
+        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "각 단어의 왼쪽에서 바늘땀 수만큼 세어 글자 하나를 고르세요. 첫 글자는 1번째입니다. 조각 번호순으로 읽은 통로 이름을 입력하세요.", string.Empty);
         _scene.SceneImage = _images["desk-closeup.png"];
         AtmosphereCard record = CreateAtmosphereCard(
-            "편지 가장자리의 연필 메모",
-            "Candle\nHearth\nIcicle\nMidnight\nNorth\nEnvelope\nYear",
+            "봉투에 담긴 일곱 종잇조각",
+            "조각 번호 / 단어 / 바늘땀 수\n\n6 / ENVELOPE / 4\n2 / NORTH / 5\n7 / TOY / 3\n1 / CLOCK / 1\n5 / WINTER / 3\n3 / ICICLE / 3\n4 / CHIMNEY / 4",
             AtmosphereCardStyle.Letter,
             new Rectangle(350, 55, 700, 380),
             new Rectangle(55, 30, 590, 50),
@@ -1429,7 +1429,7 @@ internal sealed partial class GameForm : Form
                 return;
             }
 
-            RejectTextPuzzle(editor, "봉투의 봉인이 풀리지 않습니다. 편지의 단어와 입력한 답을 다시 확인하세요.");
+            RejectTextPuzzle(editor, "봉투의 봉인이 풀리지 않습니다. 바늘땀 수와 조각 번호, 입력한 답을 다시 확인하세요.");
         }
 
         AddAction("letter_acrostic_confirm", "통로 확인", new Rectangle(770, 440, 190, 62), (_, _) => SubmitCode(), 2);
@@ -1700,11 +1700,11 @@ internal sealed partial class GameForm : Form
             return;
         }
 
-        SetScreen(GameScreen.Melody, "퍼즐 2: 요정들의 장식 계산식", "눈사람, 트리, 선물 그림으로 된 식이 새겨져 있습니다. 각 그림의 값을 구한 뒤 마지막 식의 답을 입력하세요.", string.Empty);
+        SetScreen(GameScreen.Melody, "퍼즐 2: 요정들의 장식 계산식", "세 식을 함께 이용해 눈사람, 트리, 선물의 값을 구하세요. 같은 그림은 같은 값을 나타내며, 각 값은 1부터 9까지의 정수입니다. 마지막 식의 답을 입력하세요.", string.Empty);
         _scene.SceneImage = _images["snowglobe.png"];
         AtmosphereCard calculation = CreateAtmosphereCard(
             "스노글로브 받침의 계산판",
-            "⛄ + ⛄ = 16\n⛄ + 🎄 = 15\n🎄 + 🎁 × ⛄ = 39\n\n🎁 + ⛄ × 🎄 = ?",
+            "⛄ + 🎄 + 🎁 = 18\n2 × ⛄ + 🎄 − 🎁 = 20\n⛄ + 2 × 🎄 + 3 × 🎁 = 31\n\n(⛄ − 🎁) × 🎄 + 🎁 × 🎁 = ?",
             AtmosphereCardStyle.Letter,
             new Rectangle(250, 100, 900, 320),
             new Rectangle(55, 28, 790, 50),
@@ -1716,8 +1716,8 @@ internal sealed partial class GameForm : Form
         Font equationFont = calculation.BodyLabel.Font;
         calculation.BodyLabel.Font = Theme.ControlFont(calculation.BodyLabel, 18);
         equationFont.Dispose();
-        calculation.BodyLabel.AccessibleName = "눈사람 더하기 눈사람은 16. 눈사람 더하기 트리는 15. 트리 더하기 선물 곱하기 눈사람은 39. 선물 더하기 눈사람 곱하기 트리의 값은?";
-        calculation.BodyLabel.AccessibleDescription = "같은 그림은 모든 식에서 같은 값을 나타냅니다.";
+        calculation.BodyLabel.AccessibleName = "눈사람 더하기 트리 더하기 선물은 18. 2 곱하기 눈사람 더하기 트리 빼기 선물은 20. 눈사람 더하기 2 곱하기 트리 더하기 3 곱하기 선물은 31. 괄호 눈사람 빼기 선물 괄호 닫고 곱하기 트리 더하기 선물 곱하기 선물의 값은?";
+        calculation.BodyLabel.AccessibleDescription = "같은 그림은 모든 식에서 같은 값을 나타내며, 각 값은 1부터 9까지의 정수입니다.";
         _scene.Controls.Add(calculation);
 
         TextBox editor = CreatePuzzleCodeEditor("OrnamentEquationCode", new Rectangle(485, 440, 225, 62), 3, "장식 계산식의 숫자 정답");

@@ -4,7 +4,7 @@ public static class PuzzleRules
 {
     public const int FrostVaultAnswer = 161;
 
-    public const int OrnamentEquationAnswer = 60;
+    public const int OrnamentEquationAnswer = 44;
 
     public const string LetterAcrosticAnswer = "CHIMNEY";
 
