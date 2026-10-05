@@ -1,4 +1,4 @@
-using ThirteenthBell.Core;
+﻿using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
 
@@ -20,6 +20,10 @@ internal sealed partial class GameForm
         _arrangingText = true;
         try
         {
+            if (_gameChromeVisible && _inventory.SolvedCount > 0)
+            {
+                UpdateInventoryPresentation();
+            }
             ArrangeNarrativeText();
             foreach ((Label label, Rectangle bounds) in _textCardBounds)
             {
@@ -31,6 +35,13 @@ internal sealed partial class GameForm
                     int height = (int)Math.Ceiling(MeasureWrapped(label.Text, font, (int)Math.Round((width - 48) * _currentScale)).Height / _currentScale) + 38;
                     SetBaseBounds(label, new Rectangle(bounds.X + (bounds.Width - width) / 2, bounds.Y, width, height));
                 }
+            }
+            if (_screen == GameScreen.Menu && _actions.TryGetValue("leaderboard_all", out Button? all)
+                && _menuScene.Controls.Find("LeaderboardText", false).FirstOrDefault() is Label ranking
+                && _baseLayout.TryGetValue(ranking, out LayoutSnapshot rankingLayout))
+            {
+                Rectangle bounds = rankingLayout.Bounds;
+                SetBaseBounds(all, new Rectangle(bounds.X + (bounds.Width - 180) / 2, bounds.Bottom + 18, 180, 42));
             }
             if (_screen == GameScreen.Menu && _actions.TryGetValue("menu_back", out Button? back)
                 && _baseLayout.TryGetValue(back, out LayoutSnapshot backLayout))
@@ -46,6 +57,10 @@ internal sealed partial class GameForm
                     continue;
                 }
 
+                if (control is AlignedTextLabel { AutoEllipsis: true })
+                {
+                    continue;
+                }
                 if (control is Label or Button or TextBoxBase or NumericUpDown)
                 {
                     FitControlText(control, Math.Max(6.5f, snapshot.FontSize * _currentScale));
@@ -60,6 +75,10 @@ internal sealed partial class GameForm
 
     private void PrepareCompactControl(Control control)
     {
+        if (control.Name is "LeaderboardText" or "LetterAcrosticRecord")
+        {
+            return;
+        }
         Rectangle original = control.Bounds;
         if (control is AtmosphereCard card)
         {
@@ -160,6 +179,11 @@ internal sealed partial class GameForm
         }
 
         bool shortText = _notebookText.Text.Length <= 65 && string.IsNullOrEmpty(_hintText.Text);
+        ContentAlignment alignment = _screen == GameScreen.PostalBells
+            ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
+        _chapterLabel.TextAlign = alignment;
+        _notebookText.TextAlign = alignment;
+        _hintText.TextAlign = alignment;
         float bodySize = shortText ? 8.2f : 9f;
         float scale = _currentScale;
         using Font bodyFont = Theme.Font(Math.Max(6.5f, bodySize * scale));
@@ -197,96 +221,74 @@ internal sealed partial class GameForm
         _inspectedLocations.Add(id);
     }
 
+    private bool HasPersistentInstructions()
+    {
+        return _screen is GameScreen.PostalLedger or GameScreen.PostalBells
+            or GameScreen.Lanterns or GameScreen.Melody or GameScreen.RibbonLoom
+            or GameScreen.LetterAcrostic or GameScreen.ToyCipher or GameScreen.StarChart or GameScreen.Clock or GameScreen.Ending;
+    }
+
     private string NextGlobalHint()
     {
-        if (!_postal.DoorOpened)
+        const string none = "제공할 힌트가 없습니다";
+        if (_screen == GameScreen.PostalRoom)
         {
-            (string Id, string Text, bool Found)[] places =
+            (string Id, string Text, bool Done)[] places =
             [
-                ("postal_move_suitcase", "우편실 바닥 왼쪽의 가죽 가방을 눌러 보세요.", _postal.SuitcaseMoved),
-                ("postal_move_parcel", "우편실 바닥 가운데의 붉은 선물 상자를 눌러 보세요.", _postal.ParcelMoved),
-                ("postal_move_blanket", "우편실 바닥 오른쪽의 초록 담요를 눌러 보세요.", _postal.BellClueFound),
-                ("postal_take_key", "짐을 옮긴 자리에서 드러난 작은 황동 열쇠를 눌러 보세요.", _postal.KeyFound || !_postal.KeyVisible),
-                ("postal_drawer", "우편실 왼쪽 벽의 황동 서랍을 눌러 보세요.", _postal.DrawerOpened),
-                ("postal_bells", "우편실 오른쪽 벽의 네 개의 종을 눌러 보세요.", _postal.BellsSolved),
-                ("postal_door", "우편실 중앙의 공방 문을 눌러 보세요.", _postal.DoorOpened)
+                ("postal_move_suitcase", "바닥 왼쪽의 가죽 가방을 눌러 보세요.", _postal.SuitcaseMoved),
+                ("postal_move_parcel", "바닥 가운데의 붉은 선물 상자를 눌러 보세요.", _postal.ParcelMoved),
+                ("postal_move_blanket", "바닥 오른쪽의 초록 담요를 눌러 보세요.", _postal.BellClueFound),
+                ("postal_take_key", "짐 아래에서 드러난 황동 열쇠를 눌러 보세요.", _postal.KeyFound || !_postal.KeyVisible),
+                ("postal_drawer", "왼쪽 벽의 황동 서랍을 눌러 보세요.", _postal.RouteSolved),
+                ("postal_bells", "오른쪽 벽의 네 개의 종을 눌러 보세요.", _postal.BellsSolved),
+                ("postal_door", "중앙의 공방 문을 눌러 보세요.", _postal.DoorOpened)
             ];
-            foreach ((string id, string text, bool found) in places)
-            {
-                if (!found && !_inspectedLocations.Contains(id))
-                {
-                    return text;
-                }
-            }
-
-            if (!_postal.KeyFound)
-            {
-                return "열쇠 찾기: 서로 겹쳐 놓인 짐 아래의 바닥을 확인해 보세요.";
-            }
-            if (!_postal.DrawerOpened)
-            {
-                return "서랍: 손잡이 아래의 각인과 가지고 있는 물건을 비교해 보세요.";
-            }
-            if (!_postal.BellClueFound)
-            {
-                return "종의 기록: 부드러운 천이 가리고 있는 자리를 확인해 보세요.";
-            }
-            if (_screen == GameScreen.PostalBells && !_postal.BellsSolved || _postal.RouteSolved && !_postal.BellsSolved)
-            {
-                return "종의 봉인: 이동이 끝난 종을 다음 이동의 출발점으로 생각해 보세요.";
-            }
-            if (!_postal.RouteSolved)
-            {
-                return "배송 봉인: 서로 바로 이웃해야 하는 두 장소부터 묶어서 생각해 보세요.";
-            }
-            return "두 봉인이 모두 풀렸습니다. 중앙 문을 눌러 공방으로 들어가세요.";
+            return places.Where(place => !place.Done).OrderBy(place => _inspectedLocations.Contains(place.Id))
+                .Select(place => place.Text).FirstOrDefault() ?? none;
         }
-
-        (string Id, string Text, PuzzleId? Puzzle)[] workshopPlaces =
-        [
-            ("hotspot_lantern", "공방 왼쪽 벽의 별등 금고를 눌러 보세요.", PuzzleId.Lanterns),
-            ("hotspot_desk", "공방 왼쪽 아래의 마리의 책상을 눌러 가까이 살펴보세요.", null),
-            ("hotspot_melody", "공방 가운데 아래의 스노글로브 계산대를 눌러 보세요.", PuzzleId.Melody),
-            ("hotspot_loom", "공방 오른쪽 벽난로 앞의 양말 장치를 눌러 보세요.", PuzzleId.RibbonLoom),
-            ("desk_letter", "마리의 책상 가운데에 놓인 봉투를 눌러 보세요.", PuzzleId.LetterAcrostic),
-            ("desk_toys", "마리의 책상 위쪽 장난감 선반을 눌러 보세요.", PuzzleId.ToyCipher),
-            ("desk_chart", "마리의 책상 왼쪽 아래 별자리 도면을 눌러 보세요.", PuzzleId.StarChart),
-            ("hotspot_clock", "공방 중앙 벽의 별시계를 눌러 보세요.", null)
-        ];
-        foreach ((string id, string text, PuzzleId? puzzle) in workshopPlaces)
+        if (_screen == GameScreen.PostalLedger)
         {
-            if (!_inspectedLocations.Contains(id) && (puzzle is null || !PuzzleDone(puzzle.Value)))
-            {
-                return text;
-            }
+            return _postal.RouteSolved ? none : "서로 바로 이웃해야 하는 두 장소부터 묶어서 생각해 보세요.";
         }
-
-        (PuzzleId Puzzle, GameScreen Screen, string Hint)[] puzzles =
-        [
-            (PuzzleId.Lanterns, GameScreen.Lanterns, "별등 금고: 이웃한 숫자끼리 어떤 관계인지 비교해 보세요."),
-            (PuzzleId.Melody, GameScreen.Melody, "스노글로브 계산대: 두 식에서 같은 항을 없애면 장식 사이의 관계를 찾을 수 있습니다."),
-            (PuzzleId.RibbonLoom, GameScreen.RibbonLoom, "양말 장치: 바로 이웃해야 하는 두 색을 한 묶음으로 생각해 보세요."),
-            (PuzzleId.LetterAcrostic, GameScreen.LetterAcrostic, "마리의 편지: 바늘땀 수는 글자를 고를 위치이고, 조각 번호는 고른 글자를 읽을 순서입니다."),
-            (PuzzleId.ToyCipher, GameScreen.ToyCipher, "장난감 암호: 제목에 등장하는 종의 번호를 다시 읽어 보세요."),
-            (PuzzleId.StarChart, GameScreen.StarChart, "별자리 도면: 기록에 적힌 걸음의 방향을 생각해 보세요.")
-        ];
-        foreach ((PuzzleId puzzle, GameScreen screen, string hint) in puzzles)
+        if (_screen == GameScreen.PostalBells)
         {
-            if (screen == _screen && !PuzzleDone(puzzle))
-            {
-                return hint;
-            }
+            return _postal.BellsSolved || !_postal.BellClueFound ? none : "방금 울린 종에서 다음 이동을 시작하세요. 오른쪽 끝을 넘으면 왼쪽부터 이어서 셉니다.";
         }
-        foreach ((PuzzleId puzzle, _, string hint) in puzzles)
+        if (_screen == GameScreen.Room)
         {
-            if (!PuzzleDone(puzzle))
-            {
-                return hint;
-            }
+            (string Id, string Text, bool Done)[] places =
+            [
+                ("hotspot_lantern", "왼쪽 책상 아래의 서리 낀 황동 금고를 눌러 보세요.", PuzzleDone(PuzzleId.Lanterns)),
+                ("hotspot_desk", "왼쪽 작업대를 눌러 마리의 책상을 가까이 살펴보세요.", PuzzleDone(PuzzleId.LetterAcrostic) && PuzzleDone(PuzzleId.ToyCipher) && PuzzleDone(PuzzleId.StarChart)),
+                ("hotspot_melody", "아래쪽의 스노글로브를 눌러 보세요.", PuzzleDone(PuzzleId.Melody)),
+                ("hotspot_loom", "양말이 걸린 오른쪽 벽난로를 눌러 보세요.", PuzzleDone(PuzzleId.RibbonLoom)),
+                ("hotspot_clock", "중앙의 별시계를 눌러 획득한 기억의 숫자를 맞추세요.", !_state.CanOpenClock || _state.ClockRestored)
+            ];
+            return places.Where(place => !place.Done).OrderBy(place => _inspectedLocations.Contains(place.Id))
+                .Select(place => place.Text).FirstOrDefault() ?? none;
         }
-
-        return _state.ClockRestored
-            ? "별시계가 열렸습니다. 선물을 전할지, 태엽으로 쓸지 선택하세요."
-            : "별시계: 획득한 기억을 펼쳐 숫자가 새겨진 조각과 다이얼의 이름을 비교해 보세요.";
+        if (_screen == GameScreen.Desk)
+        {
+            (PuzzleId Puzzle, string Text)[] places =
+            [
+                (PuzzleId.LetterAcrostic, "책상 가운데의 봉투를 눌러 마리의 편지를 읽어 보세요."),
+                (PuzzleId.ToyCipher, "책상 위쪽 장난감 선반을 눌러 보세요."),
+                (PuzzleId.StarChart, "책상 왼쪽 아래의 별자리 도면을 눌러 보세요.")
+            ];
+            return places.Where(place => !PuzzleDone(place.Puzzle)).Select(place => place.Text).FirstOrDefault() ?? none;
+        }
+        return _screen switch
+        {
+            GameScreen.Lanterns when !PuzzleDone(PuzzleId.Lanterns) => "이웃한 숫자끼리 어떤 관계인지 비교해 보세요.",
+            GameScreen.Melody when !PuzzleDone(PuzzleId.Melody) => "두 식에서 같은 항을 없애면 장식 사이의 관계를 찾을 수 있습니다.",
+            GameScreen.RibbonLoom when !PuzzleDone(PuzzleId.RibbonLoom) => "초록(2)을 가운데 고리에 걸고, 파랑(4)을 빨강(3)보다 오른쪽에 배치해 보세요.",
+            GameScreen.Letter when !PuzzleDone(PuzzleId.LetterAcrostic) => "편지를 읽은 뒤 아래의 ‘편지의 봉인 풀기’를 눌러 종잇조각을 확인해 보세요.",
+            GameScreen.LetterAcrostic when !PuzzleDone(PuzzleId.LetterAcrostic) => "바늘땀 수는 글자를 고를 위치이고, 조각 번호는 고른 글자를 읽을 순서입니다.",
+            GameScreen.ToyCipher when !PuzzleDone(PuzzleId.ToyCipher) => "제목에 등장하는 종의 번호를 다시 읽어 보세요.",
+            GameScreen.StarChart when !PuzzleDone(PuzzleId.StarChart) => "기록에 적힌 걸음의 방향을 생각해 보세요.",
+            GameScreen.Clock when _state.CanOpenClock && !_state.ClockRestored => "획득한 기억을 펼쳐 숫자가 새겨진 조각과 다이얼의 이름을 비교해 보세요.",
+            GameScreen.Choice => "선물을 전달할지, 별시계의 태엽으로 쓸지 선택해 주세요.",
+            _ => none
+        };
     }
 }

@@ -1,4 +1,4 @@
-namespace ThirteenthBell.Core;
+﻿namespace ThirteenthBell.Core;
 
 public static class PuzzleRules
 {
@@ -58,6 +58,7 @@ public static class PuzzleRules
         return green is not 0 and not 3
             && blue > red
             && Math.Abs(yellow - blue) != 1
+            // The displayed clues intentionally leave alternatives; preserve the original accepted arrangement.
             && green + 1 == red;
     }
 
@@ -69,19 +70,19 @@ public static class PuzzleRules
     public static bool MatchesLetterAcrostic(string? input)
     {
         string normalized = NormalizeTextAnswer(input);
-        return normalized is LetterAcrosticAnswer or "굴뚝";
+        return normalized == LetterAcrosticAnswer;
     }
 
     public static bool MatchesToyCipher(string? input)
     {
         string normalized = NormalizeTextAnswer(input);
-        return normalized is ToyCipherAnswer or "자정";
+        return normalized == ToyCipherAnswer;
     }
 
     public static bool MatchesStarChart(string? input)
     {
         string normalized = NormalizeTextAnswer(input);
-        return normalized is StarChartAnswer or "오로라";
+        return normalized == StarChartAnswer;
     }
 
     private static string NormalizeTextAnswer(string? input)

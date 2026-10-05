@@ -1,4 +1,4 @@
-using System.Drawing.Imaging;
+﻿using System.Drawing.Imaging;
 using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
@@ -12,19 +12,22 @@ internal static partial class PostalRoomSmoke
         Button hint = Get<Button>(form, "_hintButton");
         Check(hint.Enabled && hint.Visible && hint.Parent == Get<SceneCanvas>(form, "_scene"), "global hint immediate and outside narrative");
         Call(form, "ShowHint");
-        Check(Get<Label>(form, "_notebookText").Text.Contains("가죽 가방", StringComparison.Ordinal), "first hint points to unseen suitcase");
+        Check(Get<Label>(form, "_hintText").Text.Contains("가죽 가방", StringComparison.Ordinal), "first hint points to unseen suitcase");
         Call(form, "MovePostalProp", 0);
+        Set(form, "_elapsedBeforeSession", TimeSpan.FromMinutes(3));
         Call(form, "ShowHint");
-        Check(Get<Label>(form, "_notebookText").Text.Contains("붉은 선물", StringComparison.Ordinal), "hint skips inspected suitcase");
+        Check(Get<Label>(form, "_hintText").Text.Contains("붉은 선물", StringComparison.Ordinal), "hint skips inspected suitcase");
         HashSet<string> inspected = Get<HashSet<string>>(form, "_inspectedLocations");
         inspected.UnionWith(["postal_move_suitcase", "postal_move_parcel", "postal_move_blanket", "postal_drawer", "postal_bells", "postal_door"]);
+        Set(form, "_elapsedBeforeSession", TimeSpan.FromMinutes(6));
         Call(form, "ShowHint");
-        Check(Get<Label>(form, "_notebookText").Text.StartsWith("열쇠 찾기:", StringComparison.Ordinal), "all inspected gives subtle unresolved clue");
+        Check(Get<Label>(form, "_hintText").Text.Contains("붉은 선물", StringComparison.Ordinal), "all inspected still offers current room unresolved task");
         Call(form, "SaveProgressBackup", false);
         Check(Get<ProgressBackupStore>(form, "_progressBackupStore").TryLoad(out ProgressBackup? backup, out _) && backup!.InspectedLocations.Contains("postal_drawer"), "inspection history persisted");
         Call(form, "RestoreProgress", backup!);
         Check(Get<HashSet<string>>(form, "_inspectedLocations").Contains("postal_drawer"), "inspection history restored");
 
+        Get<Label>(form, "_hintText").Text = string.Empty;
         Call(form, "ShowNarrativeMessage", "서랍은 잠겨 있다.");
         Size shortSize = Get<Control>(form, "_sidebar").Size;
         float shortFont = Get<Label>(form, "_notebookText").Font.SizeInPoints;
@@ -35,6 +38,8 @@ internal static partial class PostalRoomSmoke
         Check(Get<Label>(form, "_notebookText").Font.SizeInPoints > shortFont, "short narrative uses smaller font");
         CheckTextFits(form, "NotebookText");
         Capture(form, "adaptive-long-message");
+        Set(form, "_elapsedBeforeSession", TimeSpan.FromMinutes(9));
+        Call(form, "UpdateHintAvailability");
         Get<Control>(form, "_sidebar").Visible = false;
         Check(hint.Visible && hint.Enabled, "global hint survives hidden narrative");
         CheckHotspotBackdrop(form, "postal_door", "postal-hotspot-focused");
@@ -45,11 +50,11 @@ internal static partial class PostalRoomSmoke
         Call(form, "ShowRoom");
         CheckHotspotBackdrop(form, "hotspot_lantern", "workshop-hotspot-focused");
         Call(form, "ShowHint");
-        Check(Get<Label>(form, "_notebookText").Text.Contains("별등 금고", StringComparison.Ordinal), "workshop exploration hint first");
+        Check(Get<Label>(form, "_hintText").Text.Contains("황동 금고", StringComparison.Ordinal), "workshop exploration hint first");
         Get<HashSet<string>>(form, "_inspectedLocations").UnionWith(["hotspot_lantern", "hotspot_desk", "hotspot_melody", "hotspot_loom", "desk_letter", "desk_toys", "desk_chart", "hotspot_clock"]);
         Call(form, "ShowStarChartPuzzle");
         Call(form, "ShowHint");
-        Check(Get<Label>(form, "_notebookText").Text.StartsWith("별자리 도면:", StringComparison.Ordinal) && !Get<Label>(form, "_notebookText").Text.Contains("AURORA", StringComparison.Ordinal), "all workshop locations inspected gives current unsolved small hint");
+        Check(Get<Label>(form, "_hintText").Text.Contains("걸음", StringComparison.Ordinal) && !Get<Label>(form, "_hintText").Text.Contains("AURORA", StringComparison.Ordinal), "all workshop locations inspected gives current unsolved small hint");
 
         string[] screens = ["ShowLanternPuzzle", "ShowSnowglobePuzzle", "ShowStockingPuzzle", "ShowLetterAcrosticPuzzle", "ShowToyCipherPuzzle", "ShowStarChartPuzzle", "ShowPostalLedger", "ShowPostalBells"];
         PostalRoomProgress postal = PostalRoomProgress.CompletedLegacyRoom();
@@ -153,9 +158,8 @@ internal static partial class PostalRoomSmoke
 
         Call(form, "ShowLetterAcrosticPuzzle");
         AtmosphereCard record = (AtmosphereCard)form.Controls.Find("LetterAcrosticRecord", true).Single();
-        string decoded = string.Concat(record.BodyLabel.Text.Split('\n')
-            .Select(line => line.Split('/', StringSplitOptions.TrimEntries))
-            .Where(parts => parts.Length == 3 && int.TryParse(parts[0], out _))
+        string decoded = string.Concat(Enumerable.Range(0, 7)
+            .Select(row => Enumerable.Range(0, 3).Select(column => record.Controls.Find($"AcrosticRow{row}Column{column}", false).Single().Text).ToArray())
             .OrderBy(parts => int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture))
             .Select(parts => parts[1][int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) - 1]));
         Check(decoded == "CHIMNEY", "displayed letter fragments decode to chimney");
@@ -240,7 +244,7 @@ internal static partial class PostalRoomSmoke
     {
         Button button = Get<Dictionary<string, Button>>(form, "_actions")["menu_back"];
         Control menu = Get<Control>(form, "_menuScene");
-        int bottom = menu.Controls.OfType<Label>().Max(label => label.Bottom);
+        int bottom = menu.Controls.Cast<Control>().Where(control => control is Label or AtmosphereCard).Max(control => control.Bottom);
         Check(button.Top > bottom && button.Bottom < menu.Height, "guide back button below dynamic text card and inside screen");
     }
 
@@ -283,7 +287,7 @@ internal static partial class PostalRoomSmoke
         {
             foreach (Control control in parent.Controls)
             {
-                if (control.Visible && control is Label label && !string.IsNullOrEmpty(label.Text))
+                if (control.Visible && control is Label label && !label.AutoEllipsis && !string.IsNullOrEmpty(label.Text))
                 {
                     Size measured = TextRenderer.MeasureText(label.Text, label.Font,
                         new Size(Math.Max(1, label.Width - label.Padding.Horizontal), int.MaxValue),

@@ -1,4 +1,4 @@
-using System.Drawing.Drawing2D;
+﻿using System.Drawing.Drawing2D;
 using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
@@ -29,6 +29,7 @@ internal sealed partial class GameForm
     ];
 
     private static readonly Rectangle PostalKeyBounds = new(505, 615, 120, 65);
+    private static readonly int[] PostalBellCenters = [354, 584, 818, 1046];
 
     private const string PostalBellClue = "가장 왼쪽 종을 먼저 울려 주세요. 그 종에서 오른쪽으로 1칸 이동해 울리고,\n이어서 2칸, 3칸, 4칸, 5칸씩 이동해 울려 주세요. 끝을 넘으면 왼쪽부터 이어서 세어 주세요. 모두 여섯 번입니다.";
 
@@ -69,6 +70,11 @@ internal sealed partial class GameForm
 
     private void ShowPostalRoom()
     {
+        if (_gameInProgress)
+        {
+            _gameStopwatch.Start();
+            _elapsedTimer.Start();
+        }
         SetScreen(GameScreen.PostalRoom, "서막: 수취인 없는 우편실",
             "배달부 엘리아스가 남긴 짐이 바닥에 쌓여 있습니다. 가방과 상자, 담요를 옮겨 보면 단서를 찾을 수 있을 것 같습니다. 공방 문에는 두 개의 봉인이 걸려 있습니다.",
             "물건을 누르거나 끌어 옮겨 보세요. 발견한 물건과 기록은 화면 위에서 다시 확인할 수 있습니다.");
@@ -268,7 +274,8 @@ internal sealed partial class GameForm
         {
             keyAction.Dispose();
         }
-        ShowNarrativeMessage(message);
+        bool progression = _postal.KeyVisible || (prop == 2 && _postal.BlanketMoved);
+        ShowNarrativeMessage(message, progression);
         UpdatePostalInventory();
         _scene.Invalidate();
         PlayClick();
@@ -287,7 +294,7 @@ internal sealed partial class GameForm
         {
             keyAction.Dispose();
         }
-        ShowNarrativeMessage("별 모양 황동 열쇠를 주웠습니다. 왼쪽 서랍과 중앙 문에도 같은 별 모양이 새겨져 있습니다.");
+        ShowNarrativeMessage("별 모양 황동 열쇠를 주웠습니다. 왼쪽 서랍과 중앙 문에도 같은 별 모양이 새겨져 있습니다.", progression: true);
         UpdatePostalInventory();
         _scene.Invalidate();
         PlaySound(GameSound.PuzzleItem);
@@ -298,7 +305,7 @@ internal sealed partial class GameForm
     {
         if (!_postal.KeyFound)
         {
-            ShowNarrativeMessage("황동 서랍은 잠겨 있습니다. 손잡이 아래에 별 모양 열쇠 구멍이 있습니다. 바닥의 짐을 살펴보세요.");
+            ShowNarrativeMessage("황동 서랍은 잠겨 있습니다. 손잡이 아래에 별 모양 열쇠 구멍이 있습니다. 바닥의 짐을 살펴보세요.", progression: true);
             PlaySound(GameSound.Locked);
             return;
         }
@@ -371,13 +378,15 @@ internal sealed partial class GameForm
             _postal.BellClueFound ? "담요에서 찾은 종의 기록을 위쪽 명판에서 확인하세요." : "종을 울리는 방법을 아직 모릅니다. 우편실 바닥의 짐을 살펴보세요.");
         UsePostalNarrativeLayout();
         _scene.SceneImage = _images["postal-bells.png"];
-        AddPostalText("PostalBellRecord", _postal.BellClueFound ? PostalBellClue : "종을 울리는 방법이 적힌 기록이 필요합니다.\n우편실의 담요를 살펴보세요.", new Rectangle(385, 64, 645, 105), 9.5f, Color.FromArgb(64, 38, 24));
-        int[] bellCenters = [350, 575, 805, 1040];
+        Label record = AddPostalText("PostalBellRecord", _postal.BellClueFound ? PostalBellClue : "종을 울리는 방법이 적힌 기록이 필요합니다.\n우편실의 담요를 살펴보세요.", new Rectangle(385, 64, 645, 105), 9.5f, Color.FromArgb(64, 38, 24));
+        record.TextAlign = ContentAlignment.MiddleCenter;
         for (int bell = 0; bell < 4; bell++)
         {
             int selected = bell;
-            AddHotspot($"postal_bell_{bell}", $"{bell + 1}번 종 울리기", new Rectangle(bellCenters[bell] - 90, 280, 180, 220), (_, _) => RingPostalBell(selected), bell + 1, _postal.BellsSolved);
-            AddPostalText($"PostalBellNumber{bell}", $"{bell + 1}번", new Rectangle(bellCenters[bell] - 35, 490, 85, 35), 13, Theme.PaleGold);
+            int center = PostalBellCenters[bell];
+            AddHotspot($"postal_bell_{bell}", $"{bell + 1}번 종 울리기", new Rectangle(center - 90, 280, 180, 220), (_, _) => RingPostalBell(selected), bell + 1, _postal.BellsSolved);
+            Label number = AddPostalText($"PostalBellNumber{bell}", $"{bell + 1}번", new Rectangle(center - 45, 503, 90, 35), 13, Theme.PaleGold);
+            number.TextAlign = ContentAlignment.MiddleCenter;
         }
         _postalBellProgress = AddPostalText("PostalBellProgress", "기록한 울림: 0 / 6", new Rectangle(400, 548, 680, 40), 14, Theme.PaleGold);
         AddAction("postal_bell_check", "울림 확인", new Rectangle(470, 604, 220, 58), (_, _) => CheckPostalBells(), 6);
@@ -425,6 +434,10 @@ internal sealed partial class GameForm
 
     private void CheckPostalBells()
     {
+        if (_postal.BellsSolved)
+        {
+            return;
+        }
         if (_postalBellInput.Count != 6)
         {
             ShowNarrativeMessage("출발 종을 포함해 여섯 번의 울림이 필요합니다. 여섯 번을 모두 울린 뒤 확인해 보세요. 아직은 실패 횟수가 늘어나지 않습니다.");
@@ -433,6 +446,10 @@ internal sealed partial class GameForm
         if (!PostalPuzzleRules.MatchesBellSequence(_postalBellInput))
         {
             _state.RecordFailure();
+            if (EndRunIfFailureLimitExceeded())
+            {
+                return;
+            }
             _postalBellInput.Clear();
             UpdatePostalBellProgress();
             UpdateHeader();
@@ -443,7 +460,7 @@ internal sealed partial class GameForm
         }
         _postal.BellsSolved = true;
         ShowPostalBells();
-        PlaySound(GameSound.ClockRestored);
+        PlaySound(GameSound.EndingBell);
         SaveProgressBackup(reportFailure: false);
     }
 
@@ -464,13 +481,13 @@ internal sealed partial class GameForm
             {
                 remaining.Add("종의 봉인이 남아 있습니다");
             }
-            ShowNarrativeMessage("공방 문이 잠겨 있습니다. " + string.Join(". ", remaining) + ".");
+            ShowNarrativeMessage("공방 문이 잠겨 있습니다. " + string.Join(". ", remaining) + ".", progression: true);
             PlaySound(GameSound.Locked);
             return;
         }
         _postal.DoorOpened = true;
         ShowRoom();
-        ShowNarrativeMessage("별 모양 열쇠를 돌리자 공방 문이 열렸습니다. 문 너머에는 마리의 공방이 있습니다. 이제 노엘의 선물을 되찾을 차례입니다.");
+        ShowNarrativeMessage("별 모양 열쇠를 돌리자 공방 문이 열렸습니다. 문 너머에는 마리의 공방이 있습니다. 이제 노엘의 선물을 되찾을 차례입니다.", progression: true);
         PlaySound(GameSound.PuzzleItem);
         SaveProgressBackup(reportFailure: false);
     }
@@ -499,15 +516,9 @@ internal sealed partial class GameForm
             found.Add("종의 봉인 해제");
         }
         _inventory.SolvedCount = found.Count;
-        UpdateInventoryPresentation();
-        _inventoryTitle.Text = _inventoryExpanded ? "우편실 기록" : "발견한 물건과 기록";
         _inventoryText.Text = string.Join("\n", found);
-        if (_inventoryExpanded)
-        {
-            SetBaseBounds(_inventory, new Rectangle(30, 78, 1040, 205));
-            SetBaseBounds(_inventoryText, new Rectangle(18, 48, 1000, 145));
-        }
+        UpdateInventoryPresentation();
         _inventory.Visible = _gameChromeVisible && found.Count > 0;
-        _roomButton.Visible = _screen is GameScreen.PostalLedger or GameScreen.PostalBells;
+
     }
 }

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
@@ -32,23 +32,28 @@ internal sealed partial class GameForm : Form
     private const string MenuBackgroundImage = "christmas-village-aerial.png";
     private static readonly string[] SceneImagesToPreload =
     [
+        "postal-room.png",
+        "postal-props.png",
+        "postal-ledger.png",
+        "postal-bells.png",
+        WorkshopImage,
         "desk-closeup.png",
         "lanterns.png",
         "ribbon-loom.png",
         "snowglobe.png",
         "stocking-logic.png",
         "stocking-sprites.png",
-        "postal-room.png",
-        "postal-props.png",
-        "postal-ledger.png",
-        "postal-bells.png"
+        "exit-background.png"
     ];
     private static readonly TimeSpan NarrativeVisibleDuration = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan InitialNarrativeVisibleDuration = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ProgressNarrativeVisibleDuration = TimeSpan.FromSeconds(7);
+    private const int StartupTitleHoldMilliseconds = 4000;
 
     private readonly record struct LayoutSnapshot(Rectangle Bounds, Padding Padding, float FontSize, FontStyle FontStyle);
 
     private readonly ImageBank _images = new();
+    private readonly Task<Image> _menuBackgroundTask;
     private Panel _stage = null!;
     private SceneCanvas _menuScene = null!;
     private SceneCanvas _scene = null!;
@@ -105,6 +110,7 @@ internal sealed partial class GameForm : Form
     private DateTimeOffset _narrativeShownAt;
     private TimeSpan _narrativeVisibleDuration = NarrativeVisibleDuration;
     private bool _narrativePointerInside;
+    private bool _narrativeHasTimedHint;
     private DateTimeOffset _transitionStartedAt;
     private DateTimeOffset _startupFadeStartedAt;
     private Action? _firstRunContinuation;
@@ -121,8 +127,10 @@ internal sealed partial class GameForm : Form
 
     public GameForm(ILeaderboardService? leaderboardService = null, bool animationsEnabled = true, bool audioEnabled = true)
     {
+        _menuBackgroundTask = Task.Run(() => _images[MenuBackgroundImage]);
         InitializeComponent();
         _animationsEnabled = animationsEnabled;
+        _menuScene.SnowfallEnabled = animationsEnabled;
         _music = new BackgroundMusicPlayer(audioEnabled);
 
         string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app-icon.ico");
@@ -179,10 +187,12 @@ internal sealed partial class GameForm : Form
         _hintText = (Label)_sidebar.Controls.Find("HintText", false)[0];
         _hintButton = (Button)_sidebar.Controls.Find("HintButton", false)[0];
         _scene.Controls.Add(_hintButton);
-        _hintButton.Bounds = new Rectangle(1232, 746, 138, 44);
-        _hintButton.AccessibleDescription = "미확인 장소를 먼저 안내하고, 모두 조사한 뒤에는 미해결 문제의 작은 힌트를 제공합니다";
+        _hintButton.Bounds = new Rectangle(1280, 752, 90, 44);
+        _hintButton.AccessibleDescription = "현재 장면에서 선택할 수 있는 미완료 작업의 힌트를 제공합니다";
         _soundButton = (Button)_header.Controls.Find("SoundButton", false)[0];
         _roomButton = (Button)_header.Controls.Find("RoomButton", false)[0];
+        _scene.Controls.Add(_roomButton);
+        _roomButton.Bounds = new Rectangle(30, 752, 150, 44);
         (_inventoryTitle, _inventoryText) = BuildInventoryContents();
         _inventory.Click += (_, _) => ToggleInventoryExpanded();
         _inventoryTitle.Click += (_, _) => ToggleInventoryExpanded();
@@ -202,6 +212,14 @@ internal sealed partial class GameForm : Form
         }
 
         _leaderboardService = leaderboardService ?? new SupabaseLeaderboardService(_playerData);
+        string backupToken = string.IsNullOrWhiteSpace(_pendingBackup?.OnlineClaimToken)
+            ? _playerData.OnlineClaimToken : _pendingBackup.OnlineClaimToken;
+        if (_pendingBackup is not null && (_playerData.PendingFailureTokens.Contains(backupToken, StringComparer.Ordinal)
+            || (!string.IsNullOrWhiteSpace(backupToken) && _playerData.LastFailedClaimToken == backupToken)))
+        {
+            _pendingBackup = null;
+            _progressBackupStore.TryDiscard(out _);
+        }
 
         _elapsedTimer.Tick += (_, _) =>
         {
@@ -213,6 +231,7 @@ internal sealed partial class GameForm : Form
         _transitionTimer.Tick += HandleTransitionTick;
         _chromeHoverTimer.Tick += (_, _) => UpdateHeaderRevealFromPointer();
         _startupFadeTimer.Tick += HandleStartupFadeTick;
+        _failureRetryTimer.Tick += (_, _) => _ = FlushPendingFailuresAsync();
         FormClosing += HandleFormClosing;
         FormClosed += (_, _) => PrepareForShutdown();
         Resize += (_, _) => ApplyResponsiveLayout();
@@ -262,7 +281,7 @@ internal sealed partial class GameForm : Form
         Panel header = new()
         {
             Name = "TopToolbar",
-            Bounds = new Rectangle(24, 8, 890, 62),
+            Bounds = new Rectangle(24, 8, 418, 62),
             BackColor = Theme.Night,
             Padding = new Padding(14, 7, 14, 7),
             BorderStyle = BorderStyle.FixedSingle,
@@ -280,7 +299,7 @@ internal sealed partial class GameForm : Form
 
         Button sound = Theme.CreateButton("소리 켬", (_, _) => ToggleSound(), 90);
         sound.Name = "SoundButton";
-        sound.Bounds = new Rectangle(86, 8, 145, 44);
+        sound.Bounds = new Rectangle(78, 8, 102, 44);
         sound.AccessibleDescription = "효과음을 켜거나 끕니다";
         header.Controls.Add(sound);
 
@@ -292,13 +311,13 @@ internal sealed partial class GameForm : Form
         header.Controls.Add(room);
 
         Button restart = Theme.CreateButton("새 게임", (_, _) => RequestNewGame(), 92);
-        restart.Bounds = new Rectangle(443, 8, 170, 44);
+        restart.Bounds = new Rectangle(190, 8, 102, 44);
         restart.AccessibleDescription = "처음부터 새 게임을 시작합니다. 단축키 Ctrl+N";
         header.Controls.Add(restart);
 
         Button menu = Theme.CreateButton("메뉴", (_, _) => RequestReturnToMainMenu(), 93);
         menu.Name = "MenuButton";
-        menu.Bounds = new Rectangle(629, 8, 235, 44);
+        menu.Bounds = new Rectangle(302, 8, 102, 44);
         menu.AccessibleDescription = "메인 메뉴로 돌아갑니다";
         header.Controls.Add(menu);
         return header;
@@ -333,7 +352,7 @@ internal sealed partial class GameForm : Form
         hint.TextAlign = ContentAlignment.MiddleLeft;
         sidebar.Controls.Add(hint);
 
-        Button hintButton = Theme.CreateButton("힌트 (F1)", (_, _) => ShowHint(), 80);
+        Button hintButton = Theme.CreateButton("힌트", (_, _) => ShowHint(), 80);
         hintButton.Name = "HintButton";
         hintButton.Bounds = new Rectangle(1105, 67, 130, 58);
         hintButton.AccessibleDescription = "현재 퍼즐의 단계별 힌트를 표시합니다";
@@ -345,18 +364,18 @@ internal sealed partial class GameForm : Form
 
     private (Label Title, Label Contents) BuildInventoryContents()
     {
-        Label title = Theme.CreateLabel("획득한 기억, 눌러서 보기", 10.5f, FontStyle.Bold);
+        Label title = Theme.CreateLabel("획득한 기억", 10.5f, FontStyle.Bold);
         title.Name = "InventoryTitle";
         title.Bounds = new Rectangle(18, 8, 250, 42);
         title.ForeColor = Theme.Gold;
-        title.TextAlign = ContentAlignment.MiddleLeft;
+        title.TextAlign = ContentAlignment.MiddleRight;
         title.Cursor = Cursors.Hand;
         _inventory.Controls.Add(title);
 
         Label contents = Theme.CreateLabel(string.Empty, 9.5f);
         contents.Name = "InventoryText";
         contents.Bounds = new Rectangle(18, 48, 1000, 58);
-        contents.TextAlign = ContentAlignment.MiddleLeft;
+        contents.TextAlign = ContentAlignment.MiddleRight;
         contents.Cursor = Cursors.Hand;
         contents.Visible = false;
         _inventory.Controls.Add(contents);
@@ -395,10 +414,16 @@ internal sealed partial class GameForm : Form
     private async Task RunStartupSequenceAsync()
     {
         ApplyResponsiveLayout();
+        Task titleHold = Task.Delay(_animationsEnabled ? StartupTitleHoldMilliseconds : 1);
         try
         {
             _ = PreloadScenesAsync();
-            await Task.Delay(_animationsEnabled ? 180 : 1);
+            Image background = await _menuBackgroundTask;
+            if (!IsDisposed && !Disposing && !_shutdownPrepared)
+            {
+                _menuScene.SceneImage = background;
+            }
+            await titleHold;
         }
         catch (Exception exception) when (exception is IOException
             or UnauthorizedAccessException
@@ -460,6 +485,7 @@ internal sealed partial class GameForm : Form
         }
 
         _startupSequenceCompleted = true;
+        _ = FlushPendingFailuresAsync();
         _music.Play(BackgroundMusicKind.Menu);
         ShowResumePromptIfAvailable();
     }
@@ -514,12 +540,12 @@ internal sealed partial class GameForm : Form
         SetGameChromeVisible(false);
         _menuScene.Visible = true;
         _menuScene.BringToFront();
-        _menuScene.SceneImage = _images[MenuBackgroundImage];
+        _menuScene.SceneImage = _menuBackgroundTask.IsCompletedSuccessfully ? _menuBackgroundTask.Result : null;
 
         AddMenuAction("start", "게임 시작", new Rectangle(205, 375, 400, 66), (_, _) => StartGameFromMainMenu(), 1);
         AddMenuAction("menu_guide", "게임 방법", new Rectangle(205, 455, 400, 66), (_, _) => ShowGuideMenu(), 2);
         AddMenuAction("menu_credits", "제작자 보기", new Rectangle(205, 535, 400, 66), (_, _) => ShowCreditsMenu(), 3);
-        AddMenuAction("menu_exit", "게임 종료", new Rectangle(205, 615, 400, 66), (_, _) => Close(), 4);
+        AddMenuAction("menu_exit", "게임 종료", new Rectangle(205, 615, 400, 66), (_, _) => ShowConfirmationOverlay("공방을 떠나시겠어요?", "눈 내리는 루미에르 마을에서 다시 만나겠습니다.\n게임을 종료할지 선택해 주세요.", "게임 종료", () => Close()), 4);
 
         Label leaderboard = CreateCard("온라인 순위", "불러오는 중...");
         leaderboard.Name = "LeaderboardText";
@@ -539,7 +565,7 @@ internal sealed partial class GameForm : Form
         CancelMenuWork();
         ShowMenuPage(
             "게임 방법",
-            "게임 시작 시 중복되지 않는 온라인 닉네임을 설정합니다.\n우편실에서 열쇠를 찾고 두 봉인을 풀면 공방으로 들어갑니다.\n공방과 책상의 단서를 풀면 마지막 별시계가 열립니다.\n클리어하면 서버 시각 기준 최고 기록과 등수가 저장됩니다.\n\n마우스 또는 Tab과 Enter: 배경 사물 조사와 입력\n마우스 끌기 또는 클릭: 우편실의 짐 옮기기\n마우스 끌기: 양말을 고리에 직접 걸기\nF1 또는 공통 힌트 버튼: 미확인 장소부터 안내\n모든 장소를 확인했다면 미해결 문제의 작은 힌트 제공\nEsc: 현재 방의 조사 화면에서 방으로 복귀\nCtrl+N: 경고 확인 뒤 새 게임\nF11: 전체 화면과 창 모드 전환\n\n진행은 자동 백업되며 다음 실행에서 한 번만 복구할 수 있습니다.",
+            "게임 시작 시 중복되지 않는 온라인 닉네임을 설정합니다.\n우편실에서 열쇠를 찾고 두 봉인을 풀면 공방으로 들어갑니다.\n공방과 책상의 단서를 풀어 마지막 별시계를 복구하세요.\n\n11번째 오답에서 게임이 실패로 끝납니다.\n진행 포기와 복구 거부도 실패로 기록하며 순위는 공동 최하위입니다.\n진행은 자동 백업되며 다음 실행에서 한 번만 복구할 수 있습니다.",
             12f);
     }
 
@@ -556,7 +582,7 @@ internal sealed partial class GameForm : Form
             : $"\n\n저장 안내: {_dataWarning}";
         Label card = CreateCard(
             "처음 오셨군요",
-            "게임 시작 시 고유한 온라인 닉네임을 정합니다.\n클리어 기록과 등수는 메인 메뉴에 표시됩니다.\n\n마우스 또는 Tab과 Enter로 조사합니다.\n오른쪽 아래 힌트 버튼과 F1은 아직 확인하지 않은 장소부터 안내합니다.\n모든 장소를 확인했다면 미해결 문제의 작은 힌트를 제공합니다.\nEsc는 퍼즐에서 방으로 돌아가며, F11은 화면 모드를 바꿉니다.\n메뉴 이동과 종료 전에는 경고가 표시됩니다. 진행은 자동 백업되며, 다음 실행에서 불러오기를 선택한 경우 한 번만 복구됩니다." + warning);
+            "게임 시작 시 고유한 온라인 닉네임을 정합니다.\n클리어 기록과 등수는 메인 메뉴에 표시됩니다.\n\n배경의 물건을 눌러 조사합니다.\n힌트는 처음 1개이며 플레이 시간 3분마다 1개씩 충전됩니다.\n오른쪽 아래 힌트 버튼은 현재 장면의 미완료 작업만 안내합니다.\n퍼즐 지시문은 유지되며 돌아가기 버튼으로 이전 장면을 볼 수 있습니다.\n영어 답안은 대문자로 입력되며 한글은 입력할 수 없습니다.\n11번째 오답 또는 진행 포기는 실패로 기록하며 순위는 공동 최하위입니다.\n진행은 자동 백업되며 다음 실행에서 불러오기를 선택하면 한 번만 복구됩니다.\n복구를 거부하거나 백업 없이 종료하면 실패로 기록됩니다." + warning);
         card.Bounds = new Rectangle(275, 90, 850, 535);
         card.Font = Theme.Font(12, FontStyle.Regular);
         _menuScene.Controls.Add(card);
@@ -613,7 +639,7 @@ internal sealed partial class GameForm : Form
         string savedTime = backup.SavedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture);
         Label card = CreateCard(
             "중단된 진행을 발견했습니다",
-            $"플레이어: {backup.Nickname}\n완료한 기억 조각: {backup.SolvedPuzzles.Count}/{GameState.RequiredPuzzleCount}\n기록된 진행 시간: {FormatElapsed(TimeSpan.FromMilliseconds(backup.ElapsedMilliseconds))}\n백업 시각: {savedTime}\n\n이 백업은 한 번만 불러올 수 있습니다. 불러오기를 선택하면 즉시 소비되며, 불러오지 않으면 영구 삭제됩니다.");
+            $"플레이어: {backup.Nickname}\n완료한 기억 조각: {backup.SolvedPuzzles.Count}/{GameState.RequiredPuzzleCount}\n기록된 진행 시간: {FormatElapsed(TimeSpan.FromMilliseconds(backup.ElapsedMilliseconds))}\n백업 시각: {savedTime}\n\n이 백업은 한 번만 불러올 수 있습니다. 불러오기를 선택하면 즉시 소비되며, 불러오지 않으면 영구 삭제되고 실패로 기록됩니다.");
         card.Name = "ResumePrompt";
         card.Bounds = new Rectangle(275, 105, 850, 430);
         card.Font = Theme.Font(15, FontStyle.Regular);
@@ -655,11 +681,16 @@ internal sealed partial class GameForm : Form
 
     private void DiscardPendingProgress(Label status)
     {
+        string token = string.IsNullOrWhiteSpace(_pendingBackup?.OnlineClaimToken)
+            ? _playerData.OnlineClaimToken : _pendingBackup.OnlineClaimToken;
+        if (!QueueOnlineFailure(token))
+        {
+            status.Text = "실패 기록을 저장하지 못했습니다. 저장 폴더를 확인해 주세요.";
+            return;
+        }
         if (!_progressBackupStore.TryDiscard(out string? error))
         {
-            status.Text = error ?? "진행 백업을 삭제하지 못했습니다.";
-            status.ForeColor = Color.LightSalmon;
-            return;
+            AppendDataWarning(error);
         }
 
         _pendingBackup = null;
@@ -668,22 +699,35 @@ internal sealed partial class GameForm : Form
 
     private void RestoreProgress(ProgressBackup backup)
     {
-        _state = GameState.Restore(backup.SolvedPuzzles, backup.HintCount, backup.FailedAttempts, backup.ClockRestored);
+        _state = GameState.Restore(backup.SolvedPuzzles, backup.HintCount, backup.FailedAttempts, backup.ClockRestored, backup.CreatorEasterEggFound);
         _postal = backup.Postal ?? PostalRoomProgress.CompletedLegacyRoom();
         _inspectedLocations.Clear();
         _inspectedLocations.UnionWith(backup.InspectedLocations);
         ResetPostalTransientState();
         _inventoryExpanded = false;
         _playerData.Nickname = backup.Nickname;
+        if (!string.IsNullOrWhiteSpace(backup.OnlineClaimToken))
+        {
+            _playerData.OnlineClaimToken = backup.OnlineClaimToken;
+        }
         _elapsedBeforeSession = TimeSpan.FromMilliseconds(backup.ElapsedMilliseconds);
-        _gameStopwatch.Restart();
+        _gameStopwatch.Reset();
+        if (backup.Screen != nameof(GameScreen.Intro))
+        {
+            _gameStopwatch.Start();
+        }
         _treeEasterEggClicks = 0;
         _treeEasterEggFound = false;
         _gameInProgress = true;
         _lastBackupWriteUtc = DateTimeOffset.UtcNow;
-        _elapsedTimer.Start();
+        _elapsedTimer.Enabled = _gameStopwatch.IsRunning;
         UpdateWindowCloseAvailability();
 
+        if (_state.ClearFailed)
+        {
+            ShowClearFailure();
+            return;
+        }
         GameScreen restoredScreen = Enum.TryParse(backup.Screen, ignoreCase: false, out GameScreen parsed)
             ? parsed
             : GameScreen.Room;
@@ -757,10 +801,21 @@ internal sealed partial class GameForm : Form
         DisposeChildren(_menuScene);
         _menuScene.SceneImage = _images[MenuBackgroundImage];
 
-        Label card = CreateCard(heading, body);
-        card.Bounds = new Rectangle(300, 115, 800, 480);
-        card.Font = Theme.Font(fontSize, FontStyle.Regular);
-        _menuScene.Controls.Add(card);
+        if (heading == "게임 방법")
+        {
+            AtmosphereCard card = CreateAtmosphereCard(heading, body, AtmosphereCardStyle.Letter,
+                new Rectangle(275, 145, 850, 400), new Rectangle(50, 28, 750, 65),
+                new Rectangle(50, 110, 750, 230), 25, 14);
+            card.Name = "GuideDocument";
+            _menuScene.Controls.Add(card);
+        }
+        else
+        {
+            Label card = CreateCard(heading, body);
+            card.Bounds = new Rectangle(300, 115, 800, 480);
+            card.Font = Theme.Font(fontSize, FontStyle.Regular);
+            _menuScene.Controls.Add(card);
+        }
         AddMenuAction("menu_back", "메인 메뉴로 돌아가기", new Rectangle(500, 635, 400, 70), (_, _) => ShowMainMenu(), 1);
         ApplyResponsiveLayout();
         BeginScreenTransition(previousFrame);
@@ -788,10 +843,19 @@ internal sealed partial class GameForm : Form
                 return;
             }
 
-            IEnumerable<string> lines = result.Entries
-                .Take(7)
-                .Select((entry, index) => $"{index + 1}위   {entry.Nickname}   {FormatOnlineTime(entry.ClearTimeMilliseconds)}");
-            leaderboard.Text = $"온라인 순위\n\n{string.Join("\n", lines)}";
+            leaderboard.Text = "온라인 순위";
+            string[][] rows = result.Entries.Take(5).Select((entry, index) => new[]
+            {
+                $"{(entry.Failed ? Math.Max(result.TotalCount, result.Entries.Count) : index + 1)}위",
+                entry.Nickname, FormatLeaderboardResult(entry)
+            }).ToArray();
+            AddAlignedTable(leaderboard, "Ranking", RankingHeadings, rows,
+                new Rectangle(24, 55, 452, 210), 75, 225, Theme.Snow, ellipsizeName: true);
+            if (Math.Max(result.TotalCount, result.Entries.Count) > 5 && !_actions.ContainsKey("leaderboard_all"))
+            {
+                AddMenuAction("leaderboard_all", "전체 보기", new Rectangle(880, 620, 180, 48), (_, _) => ShowFullLeaderboard(), 5);
+            }
+            ApplyResponsiveLayout();
         }
         catch (OperationCanceledException)
         {
@@ -974,7 +1038,7 @@ internal sealed partial class GameForm : Form
 
         ShowConfirmationOverlay(
             "메인 메뉴로 나가기",
-            "현재 게임 진행을 포기하고 메인 메뉴로 이동합니다.\n완료하지 않은 진행 백업도 함께 삭제되며 되돌릴 수 없습니다.",
+            "현재 게임을 실패로 기록하고 메인 메뉴로 이동합니다.\n진행 백업은 삭제되며 순위는 공동 최하위가 됩니다.",
             "진행 포기하고 나가기",
             () => AbandonCurrentProgress(() => ShowMainMenu()));
     }
@@ -989,17 +1053,21 @@ internal sealed partial class GameForm : Form
 
         ShowConfirmationOverlay(
             "새 게임 시작",
-            "현재 게임 진행을 포기하고 새 닉네임 설정으로 이동합니다.\n완료하지 않은 진행 백업도 함께 삭제되며 되돌릴 수 없습니다.",
+            "현재 게임을 실패로 기록하고 새 닉네임 설정으로 이동합니다.\n진행 백업은 삭제되며 순위는 공동 최하위가 됩니다.",
             "진행 포기하고 새 게임",
             () => AbandonCurrentProgress(ShowNicknameSetup));
     }
 
     private void AbandonCurrentProgress(Action nextScreen)
     {
+        if (!QueueOnlineFailure(_playerData.OnlineClaimToken))
+        {
+            ShowConfirmationError("실패 기록을 저장하지 못했습니다. 저장 폴더를 확인해 주세요.");
+            return;
+        }
         if (!_progressBackupStore.TryDiscard(out string? error))
         {
-            ShowConfirmationError(error ?? "진행 백업을 삭제하지 못했습니다.");
-            return;
+            AppendDataWarning(error);
         }
 
         CloseConfirmationOverlay();
@@ -1032,8 +1100,9 @@ internal sealed partial class GameForm : Form
         _scene.Enabled = false;
         _menuScene.Enabled = false;
 
-        Panel overlay = new()
+        SceneCanvas overlay = new()
         {
+            SceneImage = _images["exit-background.png"],
             Name = "ConfirmationOverlay",
             Bounds = new Rectangle(0, 0, BaseWidth, BaseHeight),
             BackColor = Theme.Night,
@@ -1047,7 +1116,7 @@ internal sealed partial class GameForm : Form
             title,
             body,
             AtmosphereCardStyle.Letter,
-            new Rectangle(260, 125, 880, 430),
+            new Rectangle(290, 210, 820, 330),
             new Rectangle(60, 48, 760, 60),
             new Rectangle(80, 135, 720, 165),
             20,
@@ -1058,20 +1127,20 @@ internal sealed partial class GameForm : Form
         Label errorLabel = Theme.CreateLabel(string.Empty, 10.5f);
         errorLabel.Name = "ConfirmationError";
         errorLabel.Bounds = new Rectangle(60, 340, 760, 45);
-        errorLabel.ForeColor = Color.LightSalmon;
+        errorLabel.ForeColor = Theme.Cranberry;
         errorLabel.TextAlign = ContentAlignment.MiddleCenter;
         card.Controls.Add(errorLabel);
 
         if (alternateText is not null && onAlternate is not null)
         {
-            AddActionTo(overlay, "confirmation_accept", confirmText, new Rectangle(155, 610, 330, 72), (_, _) => onConfirm(), 1);
-            AddActionTo(overlay, "confirmation_alternate", alternateText, new Rectangle(535, 610, 330, 72), (_, _) => onAlternate(), 2);
-            AddActionTo(overlay, "confirmation_cancel", "계속 플레이", new Rectangle(915, 610, 330, 72), (_, _) => CloseConfirmationOverlay(), 3);
+            AddActionTo(overlay, "confirmation_accept", confirmText, new Rectangle(195, 570, 310, 62), (_, _) => onConfirm(), 1);
+            AddActionTo(overlay, "confirmation_alternate", alternateText, new Rectangle(545, 570, 310, 62), (_, _) => onAlternate(), 2);
+            AddActionTo(overlay, "confirmation_cancel", "계속 플레이", new Rectangle(895, 570, 310, 62), (_, _) => CloseConfirmationOverlay(), 3);
         }
         else
         {
-            AddActionTo(overlay, "confirmation_accept", confirmText, new Rectangle(330, 610, 350, 72), (_, _) => onConfirm(), 1);
-            AddActionTo(overlay, "confirmation_cancel", "계속 플레이", new Rectangle(720, 610, 350, 72), (_, _) => CloseConfirmationOverlay(), 2);
+            AddActionTo(overlay, "confirmation_accept", confirmText, new Rectangle(345, 570, 330, 62), (_, _) => onConfirm(), 1);
+            AddActionTo(overlay, "confirmation_cancel", _screen == GameScreen.Menu ? "돌아가기" : "계속 플레이", new Rectangle(725, 570, 330, 62), (_, _) => CloseConfirmationOverlay(), 2);
         }
         ApplyResponsiveLayout();
         overlay.BringToFront();
@@ -1109,6 +1178,12 @@ internal sealed partial class GameForm : Form
 
     private void HandleFormClosing(object? sender, FormClosingEventArgs eventArgs)
     {
+        if (!_gameInProgress && !_allowClose && _playerData.PendingFailureTokens.Count > 0)
+        {
+            eventArgs.Cancel = true;
+            _ = CloseAfterPendingFailureAsync();
+            return;
+        }
         if (!_gameInProgress || _allowClose)
         {
             return;
@@ -1124,7 +1199,7 @@ internal sealed partial class GameForm : Form
         eventArgs.Cancel = true;
         ShowConfirmationOverlay(
             "게임 종료",
-            "게임이 아직 끝나지 않았습니다.\n백업 후 종료하면 다음 실행에서 한 번만 불러올 수 있습니다. 백업 없이 종료하면 현재 진행 기록을 삭제합니다.",
+            "게임이 아직 끝나지 않았습니다.\n백업 후 종료하면 다음 실행에서 한 번만 불러올 수 있습니다.\n백업 없이 종료하면 실패로 기록되고 순위는 공동 최하위가 됩니다.",
             "백업 후 종료",
             ConfirmCloseWithBackup,
             "백업 없이 종료",
@@ -1143,16 +1218,32 @@ internal sealed partial class GameForm : Form
         Close();
     }
 
-    private void ConfirmCloseWithoutBackup()
+    private async void ConfirmCloseWithoutBackup()
     {
+        if (!QueueOnlineFailure(_playerData.OnlineClaimToken))
+        {
+            ShowConfirmationError("실패 기록을 저장하지 못했습니다. 저장 폴더를 확인해 주세요.");
+            return;
+        }
         if (!_progressBackupStore.TryDiscard(out string? error))
         {
-            ShowConfirmationError(error ?? "진행 백업을 삭제하지 못했습니다.");
-            return;
+            AppendDataWarning(error);
         }
 
         _pendingBackup = null;
+        _gameInProgress = false;
+        _elapsedTimer.Stop();
+        _gameStopwatch.Stop();
         ClearSessionMemo();
+        if (_confirmationOverlay is not null)
+        {
+            _confirmationOverlay.Enabled = false;
+        }
+        await FlushPendingFailuresAsync();
+        if (IsDisposed || Disposing)
+        {
+            return;
+        }
         CloseConfirmationOverlay();
         _allowClose = true;
         Close();
@@ -1178,8 +1269,10 @@ internal sealed partial class GameForm : Form
         ProgressBackup backup = new()
         {
             Nickname = _playerData.Nickname,
+            OnlineClaimToken = _playerData.OnlineClaimToken,
             SolvedPuzzles = [.. _state.SolvedPuzzles.OrderBy(puzzle => puzzle)],
             HintCount = _state.HintCount,
+            CreatorEasterEggFound = _state.CreatorEasterEggFound,
             FailedAttempts = _state.FailedAttempts,
             ClockRestored = _state.ClockRestored,
             Postal = _postal,
@@ -1238,16 +1331,17 @@ internal sealed partial class GameForm : Form
 
         _pendingBackup = null;
         _state = new GameState();
+        _terminalFailureToken = null;
         _postal = new PostalRoomProgress();
         _inspectedLocations.Clear();
         ResetPostalTransientState();
         _inventoryExpanded = false;
         _elapsedBeforeSession = TimeSpan.Zero;
-        _gameStopwatch.Restart();
+        _gameStopwatch.Reset();
         _gameInProgress = true;
         _allowClose = false;
         _lastBackupWriteUtc = DateTimeOffset.MinValue;
-        _elapsedTimer.Start();
+        _elapsedTimer.Stop();
         UpdateWindowCloseAvailability();
         PlayClick();
         ShowIntro();
@@ -1264,7 +1358,7 @@ internal sealed partial class GameForm : Form
             "시계공 마리 벨의 긴급 기록",
             "이 기록을 발견한 분께.\n\n여기는 루미에르 마을, 성 니콜라스 골목 13번의 시계 공방입니다.\n크리스마스이브 밤 11시 47분, 별시계가 멈추면서 마을의 시간도 멈췄습니다.\n그 뒤로 배달 명단에서 어린 노엘 애스터의 이름이 지워지기 시작했습니다.\n이대로라면 노엘이 선물을 기다렸다는 사실마저 아무도 기억하지 못할 것입니다.\n\n배달부 엘리아스는 노엘의 선물을 별시계 안에 숨기고 공방 문을 봉인했습니다.\n그 선물을 태엽 대신 쓰면 시간은 돌아오지만, 노엘의 기억은 영영 사라집니다.\n우편실에 남은 짐과 기록을 살펴 두 봉인을 풀어 주세요.\n공방의 장치에 흩어진 기억 조각을 모으면 별시계를 열 수 있습니다.\n노엘에게 선물을 전할 방법도 그 안에서 찾을 수 있기를 바랍니다.\n\n시계공 마리 벨",
             AtmosphereCardStyle.Letter,
-            new Rectangle(165, 30, 1070, 555),
+            new Rectangle(165, 85, 1070, 555),
             new Rectangle(65, 34, 900, 58),
             new Rectangle(75, 96, 920, 415),
             19,
@@ -1284,11 +1378,11 @@ internal sealed partial class GameForm : Form
 
         SetScreen(GameScreen.Room, "멈춘 공방", "벽난로에는 불이 타오르지만 별시계의 바늘은 멈춰 있습니다. 방 안의 물건을 눌러 살펴보세요.", "장치에 남은 단서를 풀고 기억 조각을 모으면 중앙의 별시계를 열 수 있습니다.");
         _scene.SceneImage = _images[WorkshopImage];
-        AddHotspot("hotspot_lantern", PuzzleDone(PuzzleId.Lanterns) ? "금고 완료" : "별등 금고", new Rectangle(5, 265, 150, 125), (_, _) => ShowLanternPuzzle(), 1, PuzzleDone(PuzzleId.Lanterns));
-        AddHotspot("hotspot_desk", "마리의 책상 가까이 보기", new Rectangle(160, 315, 270, 145), (_, _) => ShowDesk(), 2, false);
-        AddHotspot("hotspot_melody", PuzzleDone(PuzzleId.Melody) ? "계산대 완료" : "스노글로브 계산대", new Rectangle(425, 450, 225, 64), (_, _) => ShowSnowglobePuzzle(), 2, PuzzleDone(PuzzleId.Melody));
-        AddHotspot("hotspot_clock", _state.CanOpenClock ? "별시계 열기" : "별시계 잠김", new Rectangle(590, 175, 225, 180), (_, _) => ShowClockPuzzle(), 4, false);
-        AddHotspot("hotspot_loom", PuzzleDone(PuzzleId.RibbonLoom) ? "양말 장치 완료" : "양말 정렬 장치", new Rectangle(1060, 325, 225, 150), (_, _) => ShowStockingPuzzle(), 5, PuzzleDone(PuzzleId.RibbonLoom));
+        AddHotspot("hotspot_lantern", PuzzleDone(PuzzleId.Lanterns) ? "금고 완료" : "서리 낀 황동 금고", new Rectangle(155, 475, 165, 150), (_, _) => ShowLanternPuzzle(), 1, PuzzleDone(PuzzleId.Lanterns));
+        AddHotspot("hotspot_desk", "마리의 책상 가까이 보기", new Rectangle(25, 310, 455, 158), (_, _) => ShowDesk(), 2, false);
+        AddHotspot("hotspot_melody", PuzzleDone(PuzzleId.Melody) ? "계산대 완료" : "스노글로브 계산대", new Rectangle(390, 500, 195, 245), (_, _) => ShowSnowglobePuzzle(), 2, PuzzleDone(PuzzleId.Melody));
+        AddHotspot("hotspot_clock", _state.CanOpenClock ? "별시계 열기" : "별시계 잠김", new Rectangle(645, 45, 215, 485), (_, _) => ShowClockPuzzle(), 4, false);
+        AddHotspot("hotspot_loom", PuzzleDone(PuzzleId.RibbonLoom) ? "양말 장치 완료" : "양말이 걸린 벽난로", new Rectangle(900, 282, 355, 315), (_, _) => ShowStockingPuzzle(), 5, PuzzleDone(PuzzleId.RibbonLoom));
     }
 
     private void ShowDesk()
@@ -1299,14 +1393,19 @@ internal sealed partial class GameForm : Form
             "책상에는 봉인된 편지와 별자리 도면이 놓여 있습니다. 그 위 선반에는 작은 장난감들이 늘어서 있습니다.",
             "봉투, 장난감 선반, 나침반이 놓인 별자리 도면을 눌러 살펴보세요.");
         _scene.SceneImage = _images["desk-closeup.png"];
-        AddHotspot("desk_letter", PuzzleDone(PuzzleId.LetterAcrostic) ? "마리의 편지 다시 읽기" : "봉인된 편지 열기", new Rectangle(575, 425, 275, 130), (_, _) => ShowMarieLetter(), 1, PuzzleDone(PuzzleId.LetterAcrostic));
+        AddHotspot("desk_letter", PuzzleDone(PuzzleId.LetterAcrostic) ? "마리의 편지 다시 읽기" : "봉인된 편지 열기", new Rectangle(580, 490, 270, 100), (_, _) => ShowMarieLetter(), 1, PuzzleDone(PuzzleId.LetterAcrostic));
         AddHotspot("desk_toys", PuzzleDone(PuzzleId.ToyCipher) ? "장난감 암호 완료" : "장난감 선반 조사", new Rectangle(230, 35, 1000, 210), (_, _) => ShowToyCipherPuzzle(), 2, PuzzleDone(PuzzleId.ToyCipher));
-        AddHotspot("desk_chart", PuzzleDone(PuzzleId.StarChart) ? "별자리 암호 완료" : "별자리 도면 조사", new Rectangle(120, 405, 455, 205), (_, _) => ShowStarChartPuzzle(), 3, PuzzleDone(PuzzleId.StarChart));
+        AddHotspot("desk_chart", PuzzleDone(PuzzleId.StarChart) ? "별자리 암호 완료" : "별자리 도면 조사", new Rectangle(125, 445, 435, 145), (_, _) => ShowStarChartPuzzle(), 3, PuzzleDone(PuzzleId.StarChart));
+        AddHotspot("desk_creator", "펜이 놓인 종이", new Rectangle(900, 485, 350, 125), (_, _) => ShowCreatorEasterEgg(), 4, _state.CreatorEasterEggFound);
     }
 
     private void ReturnFromPuzzle()
     {
-        if (_screen is GameScreen.PostalLedger or GameScreen.PostalBells)
+        if (_screen is GameScreen.PostalRoom or GameScreen.Intro)
+        {
+            RequestReturnToMainMenu();
+        }
+        else if (_screen is GameScreen.Room or GameScreen.PostalLedger or GameScreen.PostalBells)
         {
             ShowPostalRoom();
         }
@@ -1331,7 +1430,7 @@ internal sealed partial class GameForm : Form
         EnvelopeLetterAnimation reveal = new()
         {
             Name = "EnvelopeReveal",
-            Bounds = new Rectangle(310, 25, 780, 600)
+            Bounds = new Rectangle(0, 0, BaseWidth, BaseHeight)
         };
         _scene.Controls.Add(reveal);
 
@@ -1339,7 +1438,7 @@ internal sealed partial class GameForm : Form
             "마리 벨이 남긴 편지",
             "노엘에게 마지막 선물을 전할 통로를 일곱 종잇조각에 나누어 숨겼습니다.\n조각마다 번호와 영어 단어, 바늘땀이 남아 있습니다.\n\n각 단어의 왼쪽에서 바늘땀 수만큼 세어 글자 하나를 골라 주세요.\n첫 글자는 1번째입니다. 고른 글자를 조각 번호 1번부터 7번까지 순서대로 읽으면\n엘리아스가 남긴 배달 통로를 찾을 수 있습니다.\n\n노엘이 기다리는 선물이 무사히 닿기를 바랍니다.\n시계공 마리 벨",
             AtmosphereCardStyle.Letter,
-            new Rectangle(170, 20, 1060, 535),
+            new Rectangle(170, 85, 1060, 470),
             new Rectangle(60, 30, 940, 55),
             new Rectangle(68, 92, 924, 390),
             18,
@@ -1365,14 +1464,25 @@ internal sealed partial class GameForm : Form
 
         try
         {
-            const int frameCount = 36;
-            for (int frame = 0; frame <= frameCount; frame++)
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            ApplyResponsiveLayout();
+            Bitmap document = new(letter.Width, letter.Height);
+            letter.Visible = true;
+            letter.DrawToBitmap(document, letter.ClientRectangle);
+            letter.Visible = false;
+            reveal.DocumentImage = document;
+            reveal.DocumentBounds = _baseLayout[letter].Bounds;
+            reveal.BringToFront();
+            BringGameChromeToFront();
+            Stopwatch elapsed = Stopwatch.StartNew();
+            while (elapsed.ElapsedMilliseconds < 1250)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                reveal.RevealProgress = frame / (float)frameCount;
-                await Task.Delay(24, cancellationToken).ConfigureAwait(true);
+                reveal.RevealProgress = elapsed.ElapsedMilliseconds / 1250f;
+                await Task.Delay(16, cancellationToken).ConfigureAwait(true);
             }
-
+            reveal.RevealProgress = 1f;
             reveal.Visible = false;
             letter.Visible = true;
             decipher.Visible = true;
@@ -1392,11 +1502,11 @@ internal sealed partial class GameForm : Form
             return;
         }
 
-        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "각 단어의 왼쪽에서 바늘땀 수만큼 세어 글자 하나를 고르세요. 첫 글자는 1번째입니다. 조각 번호순으로 읽은 통로 이름을 입력하세요.", string.Empty);
+        SetScreen(GameScreen.LetterAcrostic, "퍼즐 4: 편지의 숨은 통로", "조각마다 번호와 영어 단어, 바늘땀이 남아 있습니다. 각 단어의 왼쪽에서 바늘땀 수만큼 세어 글자 하나를 골라 주세요. 조각 번호를 맞추면 엘리아스가 남긴 배달 통로를 찾을 수 있습니다.", string.Empty);
         _scene.SceneImage = _images["desk-closeup.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "봉투에 담긴 일곱 종잇조각",
-            "조각 번호 / 단어 / 바늘땀 수\n\n6 / ENVELOPE / 4\n2 / NORTH / 5\n7 / TOY / 3\n1 / CLOCK / 1\n5 / WINTER / 3\n3 / ICICLE / 3\n4 / CHIMNEY / 4",
+            string.Empty,
             AtmosphereCardStyle.Letter,
             new Rectangle(350, 55, 700, 380),
             new Rectangle(55, 30, 590, 50),
@@ -1404,6 +1514,9 @@ internal sealed partial class GameForm : Form
             17,
             10.5f);
         record.Name = "LetterAcrosticRecord";
+        record.BodyLabel.Visible = false;
+        AddAlignedTable(record, "Acrostic", AcrosticHeadings, AcrosticRows,
+            new Rectangle(65, 86, 570, 272), 120, 290, record.BodyLabel.ForeColor);
         _scene.Controls.Add(record);
 
         TextBox editor = CreatePuzzleCodeEditor("LetterAcrosticCode", new Rectangle(470, 440, 280, 62), 12, "편지의 숨은 통로 정답", digitsOnly: false);
@@ -1507,6 +1620,10 @@ internal sealed partial class GameForm : Form
     private void RejectTextPuzzle(TextBox editor, string message)
     {
         _state.RecordFailure();
+        if (EndRunIfFailureLimitExceeded())
+        {
+            return;
+        }
         editor.Clear();
         editor.Focus();
         ShowNarrativeMessage(message);
@@ -1527,8 +1644,8 @@ internal sealed partial class GameForm : Form
         }
 
         Point roomPoint = new(
-            (int)Math.Round(eventArgs.X * 1400d / _scene.ClientSize.Width),
-            (int)Math.Round(eventArgs.Y * 750d / _scene.ClientSize.Height));
+            (int)Math.Round(eventArgs.X * (double)BaseWidth / _scene.ClientSize.Width),
+            (int)Math.Round(eventArgs.Y * (double)BaseHeight / _scene.ClientSize.Height));
         InspectRoomPoint(roomPoint);
     }
 
@@ -1641,7 +1758,7 @@ internal sealed partial class GameForm : Form
             return;
         }
 
-        SetScreen(GameScreen.Lanterns, "퍼즐 1: 얼어붙은 별빛 금고", "금고 표면에 크리스마스 날짜로 시작하는 숫자들이 새겨져 있습니다. 규칙을 찾아 빈칸에 들어갈 세 자리 수를 입력하세요.", "정답 칸에는 숫자 세 자리만 들어갑니다.");
+        SetScreen(GameScreen.Lanterns, "퍼즐 1: 서리 낀 황동 금고", "금고 표면에 크리스마스 날짜로 시작하는 숫자들이 새겨져 있습니다. 규칙을 찾아 빈칸에 들어갈 세 자리 수를 입력하세요.", "정답 칸에는 숫자 세 자리만 들어갑니다.");
         _scene.SceneImage = _images["lanterns.png"];
         AtmosphereCard record = CreateAtmosphereCard(
             "서리 금고의 기록",
@@ -1655,7 +1772,7 @@ internal sealed partial class GameForm : Form
         record.Name = "FrostVaultRecord";
         _scene.Controls.Add(record);
 
-        TextBox editor = CreatePuzzleCodeEditor("FrostVaultCode", new Rectangle(485, 395, 225, 62), 3, "별빛 금고의 세 자리 암호");
+        TextBox editor = CreatePuzzleCodeEditor("FrostVaultCode", new Rectangle(485, 395, 225, 62), 3, "황동 금고의 세 자리 암호");
         _scene.Controls.Add(editor);
 
         void SubmitCode()
@@ -1725,14 +1842,14 @@ internal sealed partial class GameForm : Form
     {
         if (PuzzleDone(PuzzleId.RibbonLoom))
         {
-            ShowSolvedMessage(PuzzleId.RibbonLoom, "세 번째 기억 조각", "양말을 순서대로 걸자 명찰의 숫자가 1225로 이어졌습니다. 장치 안의 기억 조각에는 크리스마스 날짜인 25가 새겨져 있습니다.");
+            ShowSolvedMessage(PuzzleId.RibbonLoom, "세 번째 기억 조각", "정답: 노랑(1), 초록(2), 빨강(3), 파랑(4).\n기억 조각의 정답: 25");
             return;
         }
 
         SetScreen(
             GameScreen.RibbonLoom,
             "퍼즐 3: 벽난로 앞의 양말들",
-            "명찰의 숫자: 노랑 1, 초록 2, 빨강 2, 파랑 5\n① 초록 양말은 양 끝에 걸지 않는다. ② 파랑은 빨강보다 오른쪽에 건다.\n③ 노랑과 파랑은 나란히 걸지 않는다. ④ 초록은 빨강 바로 왼쪽에 건다.",
+            "노랑(1), 초록(2), 빨강(3), 파랑(4)\n① 초록(2)은 양 끝에 걸지 않는다. ② 파랑(4)은 빨강(3)보다 오른쪽에 건다.\n③ 노랑(1)과 파랑(4)은 나란히 걸지 않는다.",
             "아래의 양말을 끌어 벽난로 위 네 고리에 걸어 주세요.");
         _scene.SceneImage = _images["stocking-logic.png"];
         _stockingPlacement = [-1, -1, -1, -1];
@@ -1746,14 +1863,14 @@ internal sealed partial class GameForm : Form
             StockingHookSlot slot = new()
             {
                 Name = $"StockingHook{index + 1}",
-                Bounds = new Rectangle(446 + (index * 142), 98, 122, 188),
+                Bounds = new Rectangle(430 + (index * 142), 164, 122, 195),
                 AccessibleName = $"왼쪽에서 {index + 1}번째 벽난로 고리"
             };
             _stockingSlots[index] = slot;
             _scene.Controls.Add(slot);
         }
 
-        string[] tags = ["1", "2", "2", "5"];
+        string[] tags = ["1", "2", "3", "4"];
         string[] names = ["노랑", "초록", "빨강", "파랑"];
         int[] initialOrder = [0, 1, 2, 3];
         do
@@ -1769,7 +1886,7 @@ internal sealed partial class GameForm : Form
             StockingPiece piece = new(index, tags[index], stockingSprites)
             {
                 Name = $"StockingPiece{index}",
-                Bounds = new Rectangle(285 + (position * 210), 355, 118, 154),
+                Bounds = new Rectangle(330 + (position * 210), 460, 118, 154),
                 TabIndex = position + 1,
                 AccessibleName = $"{names[index]} 양말 {tags[index]}, 벽난로 고리에 끌어 놓으세요"
             };
@@ -1865,7 +1982,7 @@ internal sealed partial class GameForm : Form
 
         StockingHookSlot slot = _stockingSlots[slotIndex];
         StockingPiece piece = _stockingPieces[pieceId];
-        piece.Location = new Point(slot.Left + ((slot.Width - piece.Width) / 2), slot.Top + 19);
+        piece.Location = new Point(slot.Left + ((slot.Width - piece.Width) / 2), slot.Top + (int)Math.Round(19 * _currentScale));
         piece.BringToFront();
     }
 
@@ -1878,7 +1995,7 @@ internal sealed partial class GameForm : Form
 
         if (PuzzleRules.MatchesStockingOrder(_stockingPlacement))
         {
-            CompletePuzzle(PuzzleId.RibbonLoom, "세 번째 기억 조각", "양말 장치가 열리며 기억 조각이 나타납니다.\n새겨진 숫자: 25 — 노엘이 선물을 기다리는 크리스마스");
+            CompletePuzzle(PuzzleId.RibbonLoom, "세 번째 기억 조각", "정답: 노랑(1), 초록(2), 빨강(3), 파랑(4).\n기억 조각의 정답: 25");
             return;
         }
 
@@ -1890,7 +2007,11 @@ internal sealed partial class GameForm : Form
 
         _lastFailedStockingOrder = signature;
         _state.RecordFailure();
-        ShowNarrativeMessage("양말을 모두 걸었지만 장치가 열리지 않습니다. 조건을 다시 읽고 양말의 위치를 바꿔 보세요.");
+        if (EndRunIfFailureLimitExceeded())
+        {
+            return;
+        }
+        ShowNarrativeMessage("양말을 모두 걸었지만 장치가 열리지 않습니다. 다른 배치를 시도해 보세요.");
         PlaySound(GameSound.Wrong);
         UpdateHeader();
         SaveProgressBackup(reportFailure: false);
@@ -1900,7 +2021,7 @@ internal sealed partial class GameForm : Form
     {
         if (!_state.CanOpenClock)
         {
-            ShowRoomEvent("별시계를 여는 데 필요한 기억 조각이 아직 부족합니다. 공방과 책상에 남은 단서를 더 살펴보세요.");
+            ShowNarrativeMessage("별시계를 여는 데 필요한 기억 조각이 아직 부족합니다. 공방과 책상에 남은 단서를 더 살펴보세요.", progression: true);
             PlaySound(GameSound.Locked);
             return;
         }
@@ -1940,6 +2061,10 @@ internal sealed partial class GameForm : Form
             }
             else
             {
+                if (EndRunIfFailureLimitExceeded())
+                {
+                    return;
+                }
                 ShowNarrativeMessage("별시계가 잠깐 움직이다 다시 멈췄습니다. 기억 조각의 숫자와 다이얼을 다시 확인하세요.");
                 PlaySound(GameSound.Wrong);
                 UpdateHeader();
@@ -2006,7 +2131,7 @@ internal sealed partial class GameForm : Form
         }
 
         bool trueEnding = choice == EndingChoice.DeliverTheGift;
-        string title = trueEnding ? "진엔딩: 기다림의 수취인" : "엔딩: 정확한 크리스마스";
+        string title = trueEnding ? "엔딩: 기다림의 수취인" : "엔딩: 정확한 크리스마스";
         string body = trueEnding
             ? "오로라가 비추는 집의 굴뚝으로 마지막 선물이 내려갔습니다. 자정의 종을 기다리던 노엘이 상자를 받아 들자, 지워졌던 이름이 배달 명단에 돌아왔습니다.\n\n공방에서 열세 번째 종이 울렸습니다. 마을의 시간은 1분 늦게 흐르기 시작했지만, 그 짧은 틈에 잊힌 선물들은 모두 제 주인을 찾아갔습니다.\n\n노엘은 자신을 잊지 않은 누군가가 있다는 것을 오래도록 기억했습니다."
             : "붉은 선물 상자가 빛으로 흩어져 별시계의 태엽을 채웠습니다. 시곗바늘이 다시 움직이고, 마을에는 자정을 알리는 종소리가 울려 퍼졌습니다.\n\n배달 명단에 남은 선물은 모두 제시간에 도착했습니다. 그러나 노엘의 이름은 끝내 돌아오지 않았습니다. 선물을 기다리던 아이가 있었다는 사실도 아무도 기억하지 못했습니다.\n\n마을의 시계는 정확해졌지만, 마지막 수취인은 잊히고 말았습니다.";
@@ -2047,7 +2172,7 @@ internal sealed partial class GameForm : Form
         try
         {
             ScoreSubmissionResult result = await _leaderboardService
-                .SubmitClearAsync(choice, cancellationToken)
+                .SubmitClearAsync(choice, Math.Max(1, (long)CurrentElapsed().TotalMilliseconds), _state.FailedAttempts, _state.HintCount, cancellationToken)
                 .ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || IsDisposed || _screen != GameScreen.Ending)
             {
@@ -2181,7 +2306,7 @@ internal sealed partial class GameForm : Form
         ApplyNarrativeStyle(screen);
         ShowNarrativeBox(initialExplanation: true);
         _hintButton.Visible = _hintAvailable;
-        _hintButton.Enabled = _hintAvailable;
+        UpdateHintAvailability();
         UpdateInventory();
         UpdateHeader();
         _scene.BringToFront();
@@ -2311,13 +2436,20 @@ internal sealed partial class GameForm : Form
         ShowNarrativeMessage(message);
     }
 
-    private void ShowNarrativeMessage(string message)
+    private void ShowNarrativeMessage(string message, bool progression = false)
     {
-        _notebookText.Text = message;
-        ShowNarrativeBox();
+        if (HasPersistentInstructions())
+        {
+            _hintText.Text = message;
+        }
+        else
+        {
+            _notebookText.Text = message;
+        }
+        ShowNarrativeBox(progression: progression);
     }
 
-    private void ShowNarrativeBox(bool initialExplanation = false)
+    private void ShowNarrativeBox(bool initialExplanation = false, bool progression = false)
     {
         if (_screen == GameScreen.Menu)
         {
@@ -2333,17 +2465,43 @@ internal sealed partial class GameForm : Form
         ArrangeAdaptiveText();
         _sidebar.Visible = true;
         _narrativeShownAt = DateTimeOffset.UtcNow;
-        _narrativeVisibleDuration = initialExplanation
+        _narrativeVisibleDuration = progression || (initialExplanation && _screen is GameScreen.Room or GameScreen.Desk or GameScreen.PostalRoom)
+            ? ProgressNarrativeVisibleDuration
+            : initialExplanation
             ? InitialNarrativeVisibleDuration
             : NarrativeVisibleDuration;
         _narrativePointerInside = false;
         SetNarrativeOpacity(1f);
-        _narrativeFadeTimer.Start();
+        _narrativeHasTimedHint = HasPersistentInstructions() && progression && !string.IsNullOrWhiteSpace(_hintText.Text);
+        if (HasPersistentInstructions())
+        {
+            _narrativeFadeTimer.Enabled = _narrativeHasTimedHint;
+        }
+        else
+        {
+            _narrativeFadeTimer.Start();
+        }
         _sidebar.BringToFront();
+        BringGameChromeToFront();
     }
 
     private void HandleNarrativeFadeTick(object? sender, EventArgs eventArgs)
     {
+        if (HasPersistentInstructions())
+        {
+            if (_narrativeHasTimedHint && DateTimeOffset.UtcNow - _narrativeShownAt >= ProgressNarrativeVisibleDuration)
+            {
+                _hintText.Text = string.Empty;
+                _narrativeHasTimedHint = false;
+                ArrangeAdaptiveText();
+            }
+            if (!_narrativeHasTimedHint)
+            {
+                _narrativeFadeTimer.Stop();
+            }
+            SetNarrativeOpacity(1f);
+            return;
+        }
         if (!_sidebar.Visible)
         {
             _narrativeFadeTimer.Stop();
@@ -2429,7 +2587,7 @@ internal sealed partial class GameForm : Form
         string accessibleName,
         bool digitsOnly = true)
     {
-        TextBox editor = new()
+        TextBox editor = new PuzzleAnswerTextBox(digitsOnly)
         {
             Name = name,
             Bounds = bounds,
@@ -2442,16 +2600,8 @@ internal sealed partial class GameForm : Form
             TabIndex = 1,
             AccessibleName = accessibleName
         };
-        if (digitsOnly)
-        {
-            editor.KeyPress += (_, eventArgs) =>
-            {
-                if (!char.IsControl(eventArgs.KeyChar) && !char.IsDigit(eventArgs.KeyChar))
-                {
-                    eventArgs.Handled = true;
-                }
-            };
-        }
+        editor.ImeMode = ImeMode.Disable;
+        editor.CharacterCasing = CharacterCasing.Upper;
         return editor;
     }
 
@@ -2524,6 +2674,7 @@ internal sealed partial class GameForm : Form
         _timerLabel.BringToFront();
         _topHoverZone.BringToFront();
         _hintButton.BringToFront();
+        _roomButton.BringToFront();
     }
 
     private void SetHeaderRevealed(bool revealed)
@@ -2576,6 +2727,7 @@ internal sealed partial class GameForm : Form
                 && control != _progressLabel
                 && control != _timerLabel
                 && control != _hintButton
+                && control != _roomButton
                 && control != _topHoverZone)
             .ToArray();
         foreach (Control child in children)
@@ -2672,7 +2824,7 @@ internal sealed partial class GameForm : Form
             LayoutSnapshot snapshot = _baseLayout[control];
             control.Bounds = ScaleRectangle(snapshot.Bounds, _currentScale);
             control.Padding = ScalePadding(snapshot.Padding, _currentScale);
-            if (control is Label or Button or NumericUpDown or TextBoxBase)
+            if (control is Label or Button or NumericUpDown or TextBoxBase or ListView)
             {
                 float scaledSize = Math.Max(7f, snapshot.FontSize * _currentScale);
                 if (Math.Abs(control.Font.SizeInPoints - scaledSize) > 0.05f)
@@ -2689,6 +2841,20 @@ internal sealed partial class GameForm : Form
             }
         }
 
+        if (_screen == GameScreen.RibbonLoom && _stockingPieceSlots is not null
+            && _stockingPieces is not null && _stockingPieces.All(piece => !piece.IsDisposed))
+        {
+            for (int pieceId = 0; pieceId < _stockingPieceSlots.Length; pieceId++)
+            {
+                if (_stockingPieceSlots[pieceId] >= 0)
+                {
+                    SnapStockingToSlot(pieceId, _stockingPieceSlots[pieceId]);
+                }
+            }
+            _inventory.BringToFront();
+            _sidebar.BringToFront();
+            BringGameChromeToFront();
+        }
         _stage.ResumeLayout(true);
         ArrangeAdaptiveText();
         _confirmationOverlay?.BringToFront();
@@ -2765,27 +2931,19 @@ internal sealed partial class GameForm : Form
             acquired.Add("별자리 도면: 북쪽 하늘 AURORA");
         }
 
-        _inventoryText.Text = string.Join("\n", acquired.Chunk(2).Select(row => string.Join("     ", row)));
+        _inventoryText.Text = string.Join("\n", acquired);
         _inventory.SolvedCount = acquired.Count;
         UpdateInventoryPresentation();
         _inventory.Visible = _gameChromeVisible
             && acquired.Count > 0
             && _screen is not GameScreen.Choice and not GameScreen.Ending;
-        _roomButton.Visible = _screen is GameScreen.Desk or GameScreen.Letter
-            or GameScreen.Lanterns or GameScreen.Melody or GameScreen.RibbonLoom
-            or GameScreen.LetterAcrostic or GameScreen.ToyCipher or GameScreen.StarChart or GameScreen.Clock;
         if (_screen is GameScreen.PostalRoom or GameScreen.PostalLedger or GameScreen.PostalBells)
         {
             UpdatePostalInventory();
         }
-        _roomButton.Text = _screen switch
-        {
-            GameScreen.PostalLedger or GameScreen.PostalBells => "우편실로",
-            GameScreen.Letter or GameScreen.LetterAcrostic
-                or GameScreen.ToyCipher or GameScreen.StarChart => "책상으로",
-            _ => _postal.DoorOpened ? "공방으로" : "우편실로"
-        };
-        _roomButton.AccessibleDescription = $"현재 화면을 나가 {_roomButton.Text} 돌아갑니다";
+        _roomButton.Visible = _gameChromeVisible && _screen is not GameScreen.Menu and not GameScreen.Ending;
+        _roomButton.Text = "돌아가기";
+        _roomButton.AccessibleDescription = "이전 장면으로 돌아갑니다";
     }
 
     private void ToggleInventoryExpanded()
@@ -2810,15 +2968,19 @@ internal sealed partial class GameForm : Form
 
     private void UpdateInventoryPresentation()
     {
-        Rectangle panelBounds = _inventoryExpanded
-            ? new Rectangle(30, 78, 1040, 116)
-            : new Rectangle(30, 78, 300, 58);
-        SetBaseBounds(_inventory, panelBounds);
-        SetBaseBounds(_inventoryTitle, new Rectangle(18, 8, _inventoryExpanded ? 300 : 264, 42));
-        SetBaseBounds(_inventoryText, new Rectangle(18, 48, 1000, 58));
-        _inventoryTitle.Text = _inventoryExpanded
-            ? "획득한 기억"
-            : "획득한 기억, 눌러서 보기";
+        _inventoryTitle.Text = _screen is GameScreen.PostalRoom or GameScreen.PostalLedger or GameScreen.PostalBells
+            ? (_inventoryExpanded ? "우편실 기록" : "발견한 물건과 기록") : "획득한 기억";
+        float scale = Math.Max(0.1f, _currentScale);
+        using Font title = Theme.Font(Math.Max(6.5f, 10.5f * CompactFontScale * scale), FontStyle.Bold);
+        using Font body = Theme.Font(Math.Max(6.5f, 9.5f * CompactFontScale * scale));
+        int titleWidth = (int)Math.Ceiling(TextRenderer.MeasureText(_inventoryTitle.Text, title).Width / scale);
+        int contentWidth = (int)Math.Ceiling(_inventoryText.Text.Split('\n').Max(line => TextRenderer.MeasureText(line, body).Width) / scale);
+        int width = Math.Clamp((_inventoryExpanded ? Math.Max(titleWidth, contentWidth) : titleWidth) + 36, 120, 330);
+        int titleHeight = (int)Math.Ceiling(MeasureWrapped(_inventoryTitle.Text, title, (int)((width - 36) * scale)).Height / scale) + 4;
+        int bodyHeight = _inventoryExpanded ? (int)Math.Ceiling(MeasureWrapped(_inventoryText.Text, body, (int)((width - 36) * scale)).Height / scale) + 4 : 0;
+        SetBaseBounds(_inventory, new Rectangle(1380 - width, 64, width, titleHeight + bodyHeight + 20));
+        SetBaseBounds(_inventoryTitle, new Rectangle(18, 10, width - 36, titleHeight));
+        SetBaseBounds(_inventoryText, new Rectangle(18, 10 + titleHeight, width - 36, Math.Max(1, bodyHeight)));
         _inventoryText.Visible = _inventoryExpanded;
         _inventory.Invalidate();
     }
@@ -2837,7 +2999,7 @@ internal sealed partial class GameForm : Form
 
     private void UpdateHeader()
     {
-        _progressLabel.Text = $"힌트 {_state.HintCount}  |  실패 {_state.FailedAttempts}";
+        _progressLabel.Text = $"힌트 {_state.AvailableHints(CurrentElapsed())}  |  실패 {_state.FailedAttempts}";
         _timerLabel.Text = $"시간 {ElapsedText()}";
     }
 
@@ -2871,17 +3033,23 @@ internal sealed partial class GameForm : Form
 
     private void ShowHint()
     {
-        if (!_hintAvailable || !_hintButton.Enabled)
+        if (!_hintAvailable || _confirmationOverlay is not null)
         {
             return;
         }
 
-        _chapterLabel.Text = "탐색 힌트";
-        _notebookText.Text = NextGlobalHint();
-        _hintText.Text = string.Empty;
-        _state.RecordHint();
+        string hint = NextGlobalHint();
+        if (hint != "제공할 힌트가 없습니다" && !_state.TryUseHint(CurrentElapsed()))
+        {
+            _hintText.Text = "남은 힌트가 없습니다. 플레이 시간 3분마다 힌트가 1개 충전됩니다.";
+            ShowNarrativeBox(progression: true);
+            UpdateHintAvailability();
+            return;
+        }
+        _hintText.Text = hint;
         UpdateHeader();
-        ShowNarrativeBox();
+        UpdateHintAvailability();
+        ShowNarrativeBox(progression: hint != "제공할 힌트가 없습니다");
         PlayClick();
         SaveProgressBackup(reportFailure: false);
     }
@@ -2890,7 +3058,7 @@ internal sealed partial class GameForm : Form
     {
         _hintAvailable = _gameChromeVisible && _screen is not GameScreen.Menu and not GameScreen.Intro and not GameScreen.Ending;
         _hintButton.Visible = _hintAvailable;
-        _hintButton.Enabled = _hintAvailable;
+        _hintButton.Enabled = _hintAvailable && (_state.AvailableHints(CurrentElapsed()) > 0 || NextGlobalHint() == "제공할 힌트가 없습니다");
     }
 
     private void CancelSceneWork()
@@ -3049,6 +3217,8 @@ internal sealed partial class GameForm : Form
         _chromeHoverTimer.Stop();
         _startupFadeTimer.Stop();
         _gameStopwatch.Stop();
+        _menuScene.SnowfallEnabled = false;
+        _failureRetryTimer.Stop();
         _sceneCancellation.Cancel();
         _menuCancellation.Cancel();
     }
@@ -3064,6 +3234,7 @@ internal sealed partial class GameForm : Form
             _transitionTimer.Dispose();
             _chromeHoverTimer.Dispose();
             _startupFadeTimer.Dispose();
+            _failureRetryTimer.Dispose();
             _sceneCancellation.Dispose();
             _menuCancellation.Dispose();
             _sounds.Dispose();

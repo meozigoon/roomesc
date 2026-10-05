@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using NAudio.Wave;
 using ThirteenthBell.Core;
 
@@ -27,6 +28,10 @@ internal static partial class PostalRoomSmoke
         }
         handler.Json = "{\"result\":\"reserved\",\"nickname\":\"Tester\"}";
         Check((await service.ReserveNicknameAsync("Tester", CancellationToken.None)).Status == NicknameReservationStatus.Reserved, "valid nickname response accepted");
+        Check(data.OnlineClaimToken != "test-token" && data.OnlineClaimToken.Length >= 40, "new reservation has independent run identity");
+        string firstToken = data.OnlineClaimToken;
+        Check((await service.ReserveNicknameAsync("Tester", CancellationToken.None)).Status == NicknameReservationStatus.Reserved
+            && data.OnlineClaimToken != firstToken, "next reservation preserves previous run identity");
         foreach (string json in new[] { "null", "[]", "{\"clearTimeMs\":1000,\"rank\":1}", "{\"result\":\"saved\",\"clearTimeMs\":\"1000\",\"rank\":1}", "{\"result\":\"saved\",\"clearTimeMs\":0,\"rank\":1}", "{\"result\":\"saved\",\"clearTimeMs\":1000,\"rank\":0}" })
         {
             handler.Json = json;
@@ -34,6 +39,25 @@ internal static partial class PostalRoomSmoke
         }
         handler.Json = "{\"result\":\"saved\",\"clearTimeMs\":1000,\"rank\":1}";
         Check((await service.SubmitClearAsync(EndingChoice.DeliverTheGift, CancellationToken.None)).Succeeded, "valid score accepted");
+        Check((await service.SubmitClearAsync(EndingChoice.DeliverTheGift, 123456L, 3, 2, CancellationToken.None)).Succeeded, "active elapsed and run statistics submission accepted");
+        using (JsonDocument submission = JsonDocument.Parse(handler.LastBody))
+        {
+            JsonElement body = submission.RootElement;
+            Check(body.GetProperty("elapsedMilliseconds").GetInt64() == 123456L
+                && body.GetProperty("failedAttempts").GetInt32() == 3
+                && body.GetProperty("hintCount").GetInt32() == 2, "clear submission transmits elapsed, failures and used hints");
+        }
+        handler.Json = "{\"entries\":[{\"nickname\":\"Clear\",\"clear_time_ms\":1000,\"failed\":false},{\"nickname\":\"Failed\",\"clear_time_ms\":null,\"failed\":true}],\"totalCount\":17}";
+        LeaderboardLoadResult outcomes = await service.LoadAsync(CancellationToken.None);
+        Check(outcomes.Succeeded && outcomes.Entries.Count == 2 && outcomes.Entries[1].Failed && outcomes.TotalCount == 17, "failed ranking row and server total parsed");
+        foreach (string json in new[] { "null", "[]", "{}", "{\"result\":\"saved\",\"rank\":0}", "{\"result\":\"saved\",\"rank\":\"1\"}" })
+        {
+            handler.Json = json;
+            Check(!(await service.SubmitFailureAsync(firstToken, CancellationToken.None)).Succeeded, "invalid failure response " + json);
+        }
+        handler.Json = "{\"result\":\"saved\",\"rank\":17,\"failed\":true}";
+        ScoreSubmissionResult failed = await service.SubmitFailureAsync(firstToken, CancellationToken.None);
+        Check(failed.Succeeded && failed.Rank == 17 && failed.ClearTimeMilliseconds == 0, "valid failed outcome has rank without clear time");
     }
 
     private static void CheckAudioLoopRegression()
@@ -70,14 +94,16 @@ internal static partial class PostalRoomSmoke
     private sealed class JsonResponseHandler : HttpMessageHandler
     {
         internal string Json { get; set; } = "null";
+        internal string LastBody { get; private set; } = string.Empty;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            LastBody = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(Json, Encoding.UTF8, "application/json")
-            });
+            };
         }
     }
 }

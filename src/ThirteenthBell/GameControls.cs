@@ -1,4 +1,4 @@
-using System.Drawing.Drawing2D;
+﻿using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.ComponentModel;
 using ThirteenthBell.Core;
@@ -115,65 +115,79 @@ internal sealed class EnvelopeLetterAnimation : Control
         AccessibleName = "봉투에서 편지가 나오는 애니메이션";
     }
 
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Bitmap? DocumentImage { get; set; }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Rectangle DocumentBounds { get; set; }
+
+    private static float Ease(float value)
+    {
+        value = Math.Clamp(value, 0f, 1f);
+        return value * value * (3f - 2f * value);
+    }
+
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
         base.OnPaint(eventArgs);
+        if (DocumentImage is null)
+        {
+            return;
+        }
         Graphics graphics = eventArgs.Graphics;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-        int envelopeWidth = Math.Min(520, Math.Max(240, Width - 80));
-        int envelopeHeight = Math.Max(170, envelopeWidth * 5 / 12);
-        int envelopeX = (Width - envelopeWidth) / 2;
-        int envelopeY = Height - envelopeHeight - 45;
-        int letterTravel = Math.Min(280, envelopeY - 30);
-        int letterY = envelopeY + 25 - (int)Math.Round(letterTravel * RevealProgress);
-        Rectangle letter = new(envelopeX + 38, letterY, envelopeWidth - 76, envelopeHeight + 105);
-        Rectangle envelope = new(envelopeX, envelopeY, envelopeWidth, envelopeHeight);
-
-        using SolidBrush shadow = new(Color.FromArgb(100, 0, 0, 0));
-        using SolidBrush paper = new(Color.FromArgb(248, 235, 202));
-        using SolidBrush paperShade = new(Color.FromArgb(218, 190, 142));
-        using Pen paperEdge = new(Color.FromArgb(129, 88, 48), 2f);
-        using Pen ink = new(Color.FromArgb(95, 62, 45), 2f);
-
-        Rectangle letterShadow = letter;
-        letterShadow.Offset(9, 10);
-        graphics.FillRectangle(shadow, letterShadow);
-        graphics.FillRectangle(paper, letter);
-        graphics.DrawRectangle(paperEdge, letter);
-        for (int line = 0; line < 6; line++)
+        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        graphics.ScaleTransform(Width / 1400f, Height / 820f);
+        float rise = Ease(RevealProgress / 0.65f);
+        float unfold = Ease((RevealProgress - 0.55f) / 0.45f);
+        RectangleF small = new(480, 520 - 300 * rise, 440, 280);
+        RectangleF paper = new(
+            small.X + (DocumentBounds.X - small.X) * unfold,
+            small.Y + (DocumentBounds.Y - small.Y) * unfold,
+            small.Width + (DocumentBounds.Width - small.Width) * unfold,
+            small.Height + (DocumentBounds.Height - small.Height) * unfold);
+        var saved = graphics.Save();
+        if (unfold == 0)
         {
-            int y = letter.Top + 40 + (line * 28);
-            graphics.DrawLine(ink, letter.Left + 45, y, letter.Right - 45, y);
+            graphics.SetClip(new Rectangle(0, 0, 1400, 655));
         }
+        graphics.DrawImage(DocumentImage, paper);
+        graphics.Restore(saved);
 
-        Rectangle envelopeShadow = envelope;
-        envelopeShadow.Offset(10, 12);
-        graphics.FillRectangle(shadow, envelopeShadow);
-        graphics.FillRectangle(paperShade, envelope);
-        Point[] leftFold = [new(envelope.Left, envelope.Top), new(envelope.Left, envelope.Bottom), new(envelope.Left + (envelope.Width / 2), envelope.Top + (envelope.Height / 2))];
-        Point[] rightFold = [new(envelope.Right, envelope.Top), new(envelope.Right, envelope.Bottom), new(envelope.Left + (envelope.Width / 2), envelope.Top + (envelope.Height / 2))];
-        graphics.FillPolygon(paper, leftFold);
-        graphics.FillPolygon(paper, rightFold);
-        graphics.DrawRectangle(paperEdge, envelope);
+        int alpha = (int)Math.Round(255 * (1f - unfold));
+        if (alpha == 0)
+        {
+            return;
+        }
+        Rectangle envelope = new(450, 500, 500, 200);
+        using SolidBrush back = new(Color.FromArgb(alpha, 218, 190, 142));
+        using SolidBrush front = new(Color.FromArgb(alpha, 248, 235, 202));
+        using Pen edge = new(Color.FromArgb(alpha, 129, 88, 48), 2f);
+        float opening = Ease(RevealProgress / 0.2f);
+        Point[] flap = [new(450, 500), new(950, 500), new(700, (int)(630 - 270 * opening))];
+        if (opening < 1)
+        {
+            graphics.FillPolygon(front, flap);
+            graphics.DrawPolygon(edge, flap);
+        }
+        graphics.FillRectangle(back, envelope);
+        Point[] folds = [new(450, 500), new(700, 610), new(950, 500), new(950, 700), new(450, 700)];
+        graphics.FillPolygon(front, folds);
+        graphics.DrawPolygon(edge, folds);
+        using SolidBrush wax = new(Color.FromArgb(alpha, 143, 24, 33));
+        graphics.FillEllipse(wax, 682, 592, 36, 36);
+    }
 
-        Point[] flap =
-        [
-            new(envelope.Left, envelope.Top),
-            new(envelope.Right, envelope.Top),
-            new(envelope.Left + (envelope.Width / 2), envelope.Top + (int)Math.Round((1f - RevealProgress) * envelope.Height * 0.72f))
-        ];
-        graphics.FillPolygon(paper, flap);
-        graphics.DrawPolygon(paperEdge, flap);
-
-        int sealX = envelope.Left + (envelope.Width / 2);
-        int sealY = envelope.Top + (envelope.Height / 2);
-        using SolidBrush wax = new(Color.FromArgb(143, 24, 33));
-        using Pen waxEdge = new(Color.FromArgb(221, 120, 84), 2f);
-        graphics.FillEllipse(wax, sealX - 26, sealY - 26, 52, 52);
-        graphics.DrawEllipse(waxEdge, sealX - 26, sealY - 26, 52, 52);
-        graphics.DrawLine(waxEdge, sealX - 13, sealY, sealX + 13, sealY);
-        graphics.DrawLine(waxEdge, sealX, sealY - 13, sealX, sealY + 13);
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            DocumentImage?.Dispose();
+            DocumentImage = null;
+        }
+        base.Dispose(disposing);
     }
 }
 
@@ -463,8 +477,9 @@ internal sealed class StockingPiece : Control
         graphics.FillEllipse(tag, 75, 104, 31, 31);
         graphics.DrawEllipse(tagEdge, 75, 104, 31, 31);
         using Font font = Theme.Font(11, FontStyle.Bold);
-        TextRenderer.DrawText(graphics, TagText, font, new Rectangle(75, 103, 31, 31), Theme.Night,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        using SolidBrush textBrush = new(Theme.Night);
+        using StringFormat alignment = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        graphics.DrawString(TagText, font, textBrush, new RectangleF(75, 103, 31, 31), alignment);
 
         if (Focused && ShowFocusCues)
         {
@@ -551,6 +566,7 @@ internal sealed class StartupTitleOverlay : Panel
     private readonly Label _creditLabel;
     private readonly Label _copyrightLabel;
     private float _fadeProgress;
+    private Bitmap? _titleFrame;
 
     public StartupTitleOverlay()
     {
@@ -562,22 +578,25 @@ internal sealed class StartupTitleOverlay : Panel
         Enabled = true;
         TabStop = false;
         AccessibleRole = AccessibleRole.Graphic;
-        AccessibleName = "13번째 종 시작 제목";
+        AccessibleName = "13번째 종: 잊힌 선물, Made by HSSH ESC, Copyright 2026 HSSH ESC";
 
         _titleLabel = Theme.CreateLabel("13번째 종: 잊힌 선물", 34, FontStyle.Bold);
         _titleLabel.Name = "StartupGameTitle";
         _titleLabel.Bounds = new Rectangle(0, 280, 1400, 112);
         _titleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _titleLabel.Visible = false;
         Controls.Add(_titleLabel);
 
         _creditLabel = Theme.CreateLabel("Made by HSSH ESC", 14);
         _creditLabel.Bounds = new Rectangle(0, 420, 1400, 45);
         _creditLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _creditLabel.Visible = false;
         Controls.Add(_creditLabel);
 
         _copyrightLabel = Theme.CreateLabel("Copyright © 2026 HSSH ESC. All rights reserved.", 10.5f);
         _copyrightLabel.Bounds = new Rectangle(0, 475, 1400, 38);
         _copyrightLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _copyrightLabel.Visible = false;
         Controls.Add(_copyrightLabel);
     }
 
@@ -600,8 +619,48 @@ internal sealed class StartupTitleOverlay : Panel
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
         base.OnPaint(eventArgs);
-        int alpha = Math.Clamp((int)Math.Round((1f - _fadeProgress) * 92f), 0, 92);
-        using SolidBrush veil = new(Color.FromArgb(alpha, Theme.Night));
-        eventArgs.Graphics.FillRectangle(veil, ClientRectangle);
+        if (_titleFrame is null)
+        {
+            _titleFrame = new Bitmap(Math.Max(1, Width), Math.Max(1, Height), PixelFormat.Format32bppPArgb);
+            using Graphics buffer = Graphics.FromImage(_titleFrame);
+            using SolidBrush veil = new(Color.FromArgb(92, Theme.Night));
+            buffer.FillRectangle(veil, ClientRectangle);
+            using StringFormat centered = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            DrawTitleLabel(buffer, _titleLabel, Theme.Snow, centered);
+            DrawTitleLabel(buffer, _creditLabel, Theme.PaleGold, centered);
+            DrawTitleLabel(buffer, _copyrightLabel, Theme.Snow, centered);
+        }
+        if (_fadeProgress == 0)
+        {
+            eventArgs.Graphics.DrawImageUnscaled(_titleFrame, Point.Empty);
+            return;
+        }
+        using ImageAttributes attributes = new();
+        attributes.SetColorMatrix(new ColorMatrix { Matrix33 = 1f - _fadeProgress });
+        eventArgs.Graphics.DrawImage(_titleFrame, ClientRectangle, 0, 0, _titleFrame.Width,
+            _titleFrame.Height, GraphicsUnit.Pixel, attributes);
+    }
+
+    private static void DrawTitleLabel(Graphics graphics, Label label, Color color, StringFormat alignment)
+    {
+        using SolidBrush brush = new(color);
+        graphics.DrawString(label.Text, label.Font, brush, label.Bounds, alignment);
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        _titleFrame?.Dispose();
+        _titleFrame = null;
+        base.OnSizeChanged(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _titleFrame?.Dispose();
+            _titleFrame = null;
+        }
+        base.Dispose(disposing);
     }
 }

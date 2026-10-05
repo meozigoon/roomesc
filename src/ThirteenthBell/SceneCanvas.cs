@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace ThirteenthBell;
 
@@ -7,6 +8,85 @@ internal sealed class SceneCanvas : Panel
 {
     private Image? _sceneImage;
     private Bitmap? _scaledBackdrop;
+    private SnowfallEffect? _snowfall;
+    private System.Windows.Forms.Timer? _snowfallTimer;
+    private long _snowfallLastTimestamp;
+    private bool _snowfallEnabled;
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool SnowfallEnabled
+    {
+        get => _snowfallEnabled;
+        set
+        {
+            if (_snowfallEnabled == value)
+            {
+                return;
+            }
+            _snowfallEnabled = value;
+            if (value)
+            {
+                _snowfall ??= new SnowfallEffect();
+                if (_snowfallTimer is null)
+                {
+                    _snowfallTimer = new System.Windows.Forms.Timer { Interval = 33 };
+                    _snowfallTimer.Tick += HandleSnowfallTick;
+                }
+            }
+            UpdateSnowfallTimer();
+            Invalidate(true);
+        }
+    }
+
+    private void UpdateSnowfallTimer()
+    {
+        if (_snowfallTimer is null)
+        {
+            return;
+        }
+        _snowfallLastTimestamp = Stopwatch.GetTimestamp();
+        _snowfallTimer.Enabled = _snowfallEnabled && Visible && IsHandleCreated;
+    }
+
+    private void HandleSnowfallTick(object? sender, EventArgs eventArgs)
+    {
+        long now = Stopwatch.GetTimestamp();
+        double elapsed = Stopwatch.GetElapsedTime(_snowfallLastTimestamp, now).TotalSeconds;
+        _snowfallLastTimestamp = now;
+        if (FindForm()?.WindowState == FormWindowState.Minimized)
+        {
+            return;
+        }
+        _snowfall?.Advance(elapsed);
+        Invalidate();
+        // Repaint transparent text with its parent; opaque buttons do not need another draw.
+        foreach (Control control in Controls)
+        {
+            if (control.Visible && control.BackColor.A == 0)
+            {
+                control.Invalidate(true);
+            }
+        }
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        UpdateSnowfallTimer();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        UpdateSnowfallTimer();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        _snowfallTimer?.Stop();
+        base.OnHandleDestroyed(e);
+    }
 
     public event PaintEventHandler? ScenePaint;
 
@@ -60,6 +140,10 @@ internal sealed class SceneCanvas : Panel
 
         if (_sceneImage is null)
         {
+            if (_snowfallEnabled)
+            {
+                _snowfall?.Draw(graphics, ClientSize);
+            }
             return;
         }
 
@@ -76,6 +160,10 @@ internal sealed class SceneCanvas : Panel
             graphics.DrawImageUnscaled(_scaledBackdrop, Point.Empty);
         }
         ScenePaint?.Invoke(this, new PaintEventArgs(graphics, ClientRectangle));
+        if (_snowfallEnabled)
+        {
+            _snowfall?.Draw(graphics, ClientSize);
+        }
     }
 
     internal void PaintBackdropRegion(Graphics graphics, Rectangle region)
@@ -99,6 +187,8 @@ internal sealed class SceneCanvas : Panel
         if (disposing)
         {
             ClearBackdrop();
+            _snowfallTimer?.Dispose();
+            _snowfall?.Dispose();
         }
         base.Dispose(disposing);
     }

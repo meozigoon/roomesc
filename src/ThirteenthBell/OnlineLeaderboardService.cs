@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,9 +7,9 @@ using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
 
-internal sealed record LeaderboardEntry(string Nickname, long ClearTimeMilliseconds);
+internal sealed record LeaderboardEntry(string Nickname, long ClearTimeMilliseconds, bool Failed = false);
 
-internal sealed record LeaderboardLoadResult(IReadOnlyList<LeaderboardEntry> Entries, string? Error)
+internal sealed record LeaderboardLoadResult(IReadOnlyList<LeaderboardEntry> Entries, string? Error, long TotalCount = 0)
 {
     public bool Succeeded => Error is null;
 }
@@ -30,9 +30,24 @@ internal interface ILeaderboardService : IDisposable
 {
     Task<LeaderboardLoadResult> LoadAsync(CancellationToken cancellationToken);
 
+    Task<LeaderboardLoadResult> LoadAllAsync(CancellationToken cancellationToken)
+    {
+        return LoadAsync(cancellationToken);
+    }
+
     Task<NicknameReservationResult> ReserveNicknameAsync(string nickname, CancellationToken cancellationToken);
 
     Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, CancellationToken cancellationToken);
+    Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, long? elapsedMilliseconds,
+        int failedAttempts, int hintCount, CancellationToken cancellationToken)
+    {
+        return SubmitClearAsync(ending, cancellationToken);
+    }
+
+    Task<ScoreSubmissionResult> SubmitFailureAsync(string claimToken, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new ScoreSubmissionResult(false, 0, 0, "실패 기록 서버를 사용할 수 없습니다."));
+    }
 }
 
 internal sealed class SupabaseLeaderboardService : ILeaderboardService
@@ -110,23 +125,10 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
                 return new LeaderboardLoadResult([], "온라인 순위 응답 형식이 올바르지 않습니다.");
             }
 
-            List<LeaderboardEntry> entries = [];
-            foreach (JsonElement entry in entriesElement.EnumerateArray())
-            {
-                if (entry.ValueKind == JsonValueKind.Object
-                    && entry.TryGetProperty("nickname", out JsonElement nicknameElement)
-                    && entry.TryGetProperty("clear_time_ms", out JsonElement timeElement)
-                    && nicknameElement.ValueKind == JsonValueKind.String
-                    && timeElement.ValueKind == JsonValueKind.Number
-                    && nicknameElement.GetString() is string nickname
-                    && timeElement.TryGetInt64(out long milliseconds)
-                    && milliseconds > 0)
-                {
-                    entries.Add(new LeaderboardEntry(nickname, milliseconds));
-                }
-            }
-
-            return new LeaderboardLoadResult(entries, null);
+            long totalCount = document.RootElement.TryGetProperty("totalCount", out JsonElement countElement)
+                && countElement.ValueKind == JsonValueKind.Number && countElement.TryGetInt64(out long count) && count >= 0
+                ? count : entriesElement.GetArrayLength();
+            return new LeaderboardLoadResult(ParseEntries(entriesElement), null, totalCount);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -136,6 +138,87 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         {
             return new LeaderboardLoadResult([], $"온라인 순위를 불러오지 못했습니다: {exception.Message}");
         }
+    }
+
+    public async Task<LeaderboardLoadResult> LoadAllAsync(CancellationToken cancellationToken)
+    {
+        if (_functionUri is null)
+        {
+            return new LeaderboardLoadResult([], _configurationError ?? "온라인 순위를 사용할 수 없습니다.");
+        }
+        const int pageSize = 250;
+        List<LeaderboardEntry> entries = [];
+        try
+        {
+            int offset = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Uri uri = new(_functionUri.GetLeftPart(UriPartial.Authority)
+                    + "/rest/v1/thirteenth_bell_leaderboard?select=nickname,clear_time_ms,failed&completed_at=not.is.null"
+                    + $"&order=failed.asc,clear_time_ms.asc.nullslast,ranking_penalty.asc,completed_at.asc,nickname.asc&offset={offset}&limit={pageSize}");
+                using HttpRequestMessage request = new(HttpMethod.Get, uri);
+                request.Headers.Add("apikey", _publishableKey);
+                using HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new LeaderboardLoadResult([], $"전체 순위를 불러오지 못했습니다. HTTP {(int)response.StatusCode}");
+                }
+                using JsonDocument document = await JsonDocument.ParseAsync(
+                    await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    return new LeaderboardLoadResult([], "전체 순위 응답 형식이 올바르지 않습니다.");
+                }
+                entries.AddRange(ParseEntries(document.RootElement));
+                int count = document.RootElement.GetArrayLength();
+                if (count < pageSize)
+                {
+                    return new LeaderboardLoadResult(entries, null);
+                }
+                offset = checked(offset + count);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new LeaderboardLoadResult([], "전체 순위 서버의 응답 시간이 초과되었습니다.");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or IOException)
+        {
+            return new LeaderboardLoadResult([], $"전체 순위를 불러오지 못했습니다: {exception.Message}");
+        }
+    }
+
+    private static List<LeaderboardEntry> ParseEntries(JsonElement entriesElement)
+    {
+        List<LeaderboardEntry> entries = [];
+        foreach (JsonElement entry in entriesElement.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("failed", out JsonElement failedElement)
+                && failedElement.ValueKind == JsonValueKind.True
+                && entry.TryGetProperty("nickname", out JsonElement failedNickname)
+                && failedNickname.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(failedNickname.GetString()))
+            {
+                entries.Add(new LeaderboardEntry(failedNickname.GetString()!, 0, true));
+                continue;
+            }
+            if (entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("nickname", out JsonElement nicknameElement)
+                && entry.TryGetProperty("clear_time_ms", out JsonElement timeElement)
+                && nicknameElement.ValueKind == JsonValueKind.String
+                && timeElement.ValueKind == JsonValueKind.Number
+                && nicknameElement.GetString() is string nickname
+                && timeElement.TryGetInt64(out long milliseconds)
+                && milliseconds > 0)
+            {
+                entries.Add(new LeaderboardEntry(nickname, milliseconds));
+            }
+        }
+
+        return entries;
     }
 
     public async Task<NicknameReservationResult> ReserveNicknameAsync(string nickname, CancellationToken cancellationToken)
@@ -153,8 +236,8 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
                 _configurationError ?? "온라인 닉네임 서버를 사용할 수 없습니다.");
         }
 
-        EnsureClaimToken();
-        string tokenHash = ComputeClaimHash(_playerData.OnlineClaimToken);
+        string candidateToken = EnsureClaimToken();
+        string tokenHash = ComputeClaimHash(candidateToken);
         try
         {
             using HttpRequestMessage request = CreateJsonRequest(new
@@ -203,6 +286,7 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             }
 
             _playerData.Nickname = reservedNickname;
+            _playerData.OnlineClaimToken = candidateToken;
             return new NicknameReservationResult(NicknameReservationStatus.Reserved, reservedNickname, null);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -218,7 +302,13 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         }
     }
 
-    public async Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, CancellationToken cancellationToken)
+    public Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, CancellationToken cancellationToken)
+    {
+        return SubmitClearAsync(ending, null, 0, 0, cancellationToken);
+    }
+
+    public async Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, long? elapsedMilliseconds,
+        int failedAttempts, int hintCount, CancellationToken cancellationToken)
     {
         if (_functionUri is null || string.IsNullOrWhiteSpace(_playerData.OnlineClaimToken))
         {
@@ -238,7 +328,10 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             {
                 action = "submit",
                 claimTokenHash = ComputeClaimHash(_playerData.OnlineClaimToken),
-                ending = endingValue
+                ending = endingValue,
+                elapsedMilliseconds,
+                failedAttempts,
+                hintCount
             });
             using HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
             string responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -276,6 +369,48 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         }
     }
 
+    public async Task<ScoreSubmissionResult> SubmitFailureAsync(string claimToken, CancellationToken cancellationToken)
+    {
+        if (_functionUri is null || string.IsNullOrWhiteSpace(claimToken))
+        {
+            return new ScoreSubmissionResult(false, 0, 0, "온라인 닉네임 예약 정보가 없습니다.");
+        }
+        try
+        {
+            using HttpRequestMessage request = CreateJsonRequest(new
+            {
+                action = "fail",
+                claimTokenHash = ComputeClaimHash(claimToken)
+            });
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ScoreSubmissionResult(false, 0, 0, $"실패 기록 저장 오류: HTTP {(int)response.StatusCode}");
+            }
+            using JsonDocument document = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("result", out JsonElement result) || result.ValueKind != JsonValueKind.String
+                || result.GetString() != "saved"
+                || !root.TryGetProperty("rank", out JsonElement rank) || rank.ValueKind != JsonValueKind.Number
+                || !rank.TryGetInt64(out long value) || value <= 0)
+            {
+                return new ScoreSubmissionResult(false, 0, 0, "실패 기록 응답 형식이 올바르지 않습니다.");
+            }
+            return new ScoreSubmissionResult(true, 0, value, null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ScoreSubmissionResult(false, 0, 0, "실패 기록 저장 시간이 초과되었습니다.");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or IOException)
+        {
+            return new ScoreSubmissionResult(false, 0, 0, $"실패 기록 서버 연결 오류: {exception.Message}");
+        }
+    }
+
     private HttpRequestMessage CreateRequest(HttpMethod method)
     {
         HttpRequestMessage request = new(method, _functionUri);
@@ -290,15 +425,10 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         return request;
     }
 
-    private void EnsureClaimToken()
+    private static string EnsureClaimToken()
     {
-        if (!string.IsNullOrWhiteSpace(_playerData.OnlineClaimToken))
-        {
-            return;
-        }
-
         byte[] randomBytes = RandomNumberGenerator.GetBytes(32);
-        _playerData.OnlineClaimToken = Convert.ToBase64String(randomBytes)
+        return Convert.ToBase64String(randomBytes)
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');

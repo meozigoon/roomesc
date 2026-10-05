@@ -11,9 +11,12 @@ public sealed class ProgressBackup
 
     public string Nickname { get; set; } = string.Empty;
 
+    public string OnlineClaimToken { get; set; } = string.Empty;
+
     public List<PuzzleId> SolvedPuzzles { get; set; } = [];
 
     public int HintCount { get; set; }
+    public bool CreatorEasterEggFound { get; set; }
 
     public int FailedAttempts { get; set; }
 

@@ -69,8 +69,8 @@ Deno.serve(async (request: Request) => {
   try {
     if (request.method === "GET") {
       const response = await fetch(
-        `${projectUrl}/rest/v1/thirteenth_bell_leaderboard?select=nickname,clear_time_ms&clear_time_ms=not.is.null&order=clear_time_ms.asc,completed_at.asc&limit=10`,
-        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
+        `${projectUrl}/rest/v1/thirteenth_bell_leaderboard?select=nickname,clear_time_ms,failed&completed_at=not.is.null&order=failed.asc,clear_time_ms.asc.nullslast,ranking_penalty.asc,completed_at.asc,nickname.asc&limit=10`,
+        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, Prefer: "count=exact" } },
       );
 
       if (!response.ok) {
@@ -78,7 +78,12 @@ Deno.serve(async (request: Request) => {
         return jsonResponse(502, { error: "leaderboard_query_failed" });
       }
 
-      return jsonResponse(200, { entries: await response.json() });
+      const entries = await response.json();
+      if (!Array.isArray(entries)) {
+        return jsonResponse(502, { error: "invalid_leaderboard_response" });
+      }
+      const count = Number(response.headers.get("content-range")?.split("/")[1]);
+      return jsonResponse(200, { entries, totalCount: Number.isSafeInteger(count) && count >= entries.length ? count : entries.length });
     }
 
     if (request.method !== "POST") {
@@ -127,14 +132,46 @@ Deno.serve(async (request: Request) => {
       return jsonResponse(200, { result: "reserved", nickname: row.reserved_nickname });
     }
 
+    if (payload.action === "fail") {
+      if (typeof payload.claimTokenHash !== "string" || !/^[0-9a-f]{64}$/.test(payload.claimTokenHash)) {
+        return jsonResponse(400, { error: "invalid_failure_submission" });
+      }
+      const rpc = await callRpc(projectUrl, serviceRoleKey, "thirteenth_bell_submit_failure", {
+        p_claim_token_hash: payload.claimTokenHash,
+      });
+      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1 || !isObject(rpc.data[0])) {
+        return jsonResponse(502, { error: "failure_submission_failed" });
+      }
+      const row = rpc.data[0];
+      if (row.result !== "saved" && row.result !== "already_completed") {
+        return jsonResponse(400, { error: row.result ?? "invalid_failure_submission" });
+      }
+      if (typeof row.leaderboard_rank !== "number" || !Number.isSafeInteger(row.leaderboard_rank) || row.leaderboard_rank <= 0) {
+        return jsonResponse(502, { error: "invalid_failure_response" });
+      }
+      return jsonResponse(200, { result: "saved", rank: row.leaderboard_rank, failed: row.result === "saved" });
+    }
+
     if (payload.action === "submit") {
       if (typeof payload.claimTokenHash !== "string" || typeof payload.ending !== "string") {
         return jsonResponse(400, { error: "invalid_submission" });
       }
 
+      const failedAttempts = payload.failedAttempts ?? 0;
+      const hintCount = payload.hintCount ?? 0;
+      const elapsedMilliseconds = payload.elapsedMilliseconds ?? null;
+      if (typeof failedAttempts !== "number" || !Number.isSafeInteger(failedAttempts) || failedAttempts < 0 || failedAttempts > 10
+        || typeof hintCount !== "number" || !Number.isSafeInteger(hintCount) || hintCount < 0 || hintCount > 2147483647
+        || (elapsedMilliseconds !== null && (typeof elapsedMilliseconds !== "number" || !Number.isSafeInteger(elapsedMilliseconds) || elapsedMilliseconds < 1))) {
+        return jsonResponse(400, { error: "invalid_run_statistics" });
+      }
+
       const rpc = await callRpc(projectUrl, serviceRoleKey, "thirteenth_bell_submit_clear", {
         p_claim_token_hash: payload.claimTokenHash,
         p_ending: payload.ending,
+        p_elapsed_ms: elapsedMilliseconds,
+        p_failed_attempts: failedAttempts,
+        p_hint_count: hintCount,
       });
       if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1 || !isObject(rpc.data[0])) {
         console.error("Clear submission RPC failed", rpc.status, rpc.data);

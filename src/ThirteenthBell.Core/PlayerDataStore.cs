@@ -10,6 +10,9 @@ public sealed class PlayerData
     public string Nickname { get; set; } = string.Empty;
 
     public string OnlineClaimToken { get; set; } = string.Empty;
+
+    public List<string> PendingFailureTokens { get; set; } = [];
+    public string LastFailedClaimToken { get; set; } = string.Empty;
 }
 
 public sealed class PlayerDataStore
@@ -57,6 +60,10 @@ public sealed class PlayerDataStore
 
             loaded.Nickname ??= string.Empty;
             loaded.OnlineClaimToken ??= string.Empty;
+            loaded.PendingFailureTokens ??= [];
+            loaded.LastFailedClaimToken ??= string.Empty;
+            loaded.PendingFailureTokens = loaded.PendingFailureTokens
+                .Where(token => !string.IsNullOrWhiteSpace(token)).Distinct(StringComparer.Ordinal).ToList();
 
             data = loaded;
             return true;

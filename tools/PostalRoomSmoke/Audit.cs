@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
@@ -98,7 +98,7 @@ internal static partial class PostalRoomSmoke
             EnterCode(form, "ToyCipherCode", "toy_cipher_confirm", "bad");
             TextBox badInput = (TextBox)form.Controls.Find("ToyCipherCode", true).Single();
             Check(badInput.Text.Length == 0 && badInput.ContainsFocus, "wrong cipher clears and focuses input");
-            EnterCode(form, "ToyCipherCode", "toy_cipher_confirm", "자정", enter: true);
+            EnterCode(form, "ToyCipherCode", "toy_cipher_confirm", "MIDNIGHT", enter: true);
             CompleteReturn(form, PuzzleId.ToyCipher, GameScreen.Desk);
             Call(form, "ShowStarChartPuzzle");
             EnterCode(form, "StarChartCode", "star_chart_confirm", "aurora");
@@ -270,8 +270,8 @@ internal static partial class PostalRoomSmoke
     {
         Check(PuzzleRules.MatchesFrostVaultCode("161") && !PuzzleRules.MatchesFrostVaultCode(null), "vault core boundaries");
         Check(PuzzleRules.MatchesOrnamentEquationCode("44") && !PuzzleRules.MatchesOrnamentEquationCode("60"), "equation core answer");
-        Check(PuzzleRules.MatchesLetterAcrostic(" c-h_i m n e y ") && PuzzleRules.MatchesLetterAcrostic("굴뚝"), "letter normalized and Korean answer");
-        Check(PuzzleRules.MatchesToyCipher("자정") && PuzzleRules.MatchesStarChart("오로라"), "other Korean answers");
+        Check(PuzzleRules.MatchesLetterAcrostic(" c-h_i m n e y ") && !PuzzleRules.MatchesLetterAcrostic("굴뚝"), "letter normalized and Korean answer rejected");
+        Check(!PuzzleRules.MatchesToyCipher("자정") && !PuzzleRules.MatchesStarChart("오로라"), "other Korean answers rejected");
         List<int[]> validOrders = [];
         foreach (int a in Enumerable.Range(0, 4))
         {
@@ -290,7 +290,7 @@ internal static partial class PostalRoomSmoke
                 }
             }
         }
-        Check(validOrders.Count == 1 && validOrders[0].SequenceEqual([0, 1, 2, 3]), "unique stockings among 256 candidates");
+        Check(validOrders.Count == 1 && validOrders[0].SequenceEqual([0, 1, 2, 3]), "original stocking answer preserved among 256 candidates");
         Check(!PuzzleRules.MatchesStockingOrder([-1, 1, 2, 3]), "stocking invalid id rejected");
         Check(!NicknameRules.TryNormalize(null, out _, out _) && !NicknameRules.TryNormalize("x", out _, out _), "nickname missing and short rejected");
         Check(NicknameRules.TryNormalize("  한글   이름  ", out string normalized, out _) && normalized == "한글 이름", "nickname whitespace normalization");

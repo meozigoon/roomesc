@@ -34,6 +34,7 @@ internal static partial class PostalRoomSmoke
                 CheckRules();
             }
             bool performance = args.Contains("--performance", StringComparer.Ordinal);
+            bool snowLoading = args.Contains("--snow-loading", StringComparer.Ordinal);
             if (args.Contains("--regression", StringComparer.Ordinal))
             {
                 CheckRegressionsAsync().GetAwaiter().GetResult();
@@ -42,17 +43,69 @@ internal static partial class PostalRoomSmoke
                 return 0;
             }
             Stopwatch startup = Stopwatch.StartNew();
-            using GameForm form = new(new OfflineLeaderboard(), animationsEnabled: performance, audioEnabled: false);
+            using GameForm form = new(new OfflineLeaderboard(), animationsEnabled: performance || snowLoading, audioEnabled: false);
             form.WindowState = FormWindowState.Normal;
             form.FormBorderStyle = FormBorderStyle.FixedSingle;
             form.ClientSize = performance ? new Size(1000, 600) : new Size(1400, 820);
             form.Location = new Point(20, 20);
             Set(form, "_soundEnabled", false);
+            double formCreationMs = startup.Elapsed.TotalMilliseconds;
             form.Show();
+            if (snowLoading)
+            {
+                CheckSnowAndLoading(form, startup, formCreationMs);
+                Set(form, "_gameInProgress", false);
+                Set(form, "_allowClose", true);
+                form.Close();
+                return 0;
+            }
             PumpUntil(() => Get<bool>(form, "_startupSequenceCompleted"), TimeSpan.FromSeconds(30));
             if (args.Contains("--menu-presentation", StringComparer.Ordinal))
             {
                 CheckMenuPresentation(form);
+                return 0;
+            }
+            if (args.Contains("--ui-refinement", StringComparer.Ordinal))
+            {
+                CheckUiRefinement(form);
+                Set(form, "_gameInProgress", false);
+                Set(form, "_allowClose", true);
+                form.Close();
+                return 0;
+            }
+            if (args.Contains("--run-changes", StringComparer.Ordinal))
+            {
+                CheckRunChanges(form);
+                Set(form, "_gameInProgress", false);
+                Set(form, "_allowClose", true);
+                form.Close();
+                return 0;
+            }
+            if (args.Contains("--gameplay-refinement", StringComparer.Ordinal))
+            {
+                CheckGameplayRefinement(form);
+                Set(form, "_gameInProgress", false);
+                Set(form, "_allowClose", true);
+                form.Close();
+                return 0;
+            }
+            if (args.Contains("--artwork-refinement", StringComparer.Ordinal))
+            {
+                CheckArtworkRefinement(form);
+                Set(form, "_gameInProgress", false);
+                Set(form, "_allowClose", true);
+                form.Close();
+                return 0;
+            }
+            if (args.Contains("--leaderboard-animation", StringComparer.Ordinal))
+            {
+                CheckLeaderboardUi(form);
+                Task paging = CheckFullLeaderboardPagingAsync();
+                PumpUntil(() => paging.IsCompleted, TimeSpan.FromSeconds(10));
+                paging.GetAwaiter().GetResult();
+                CheckLetterAnimation();
+                Set(form, "_allowClose", true);
+                form.Close();
                 return 0;
             }
             if (args.Contains("--comprehensive", StringComparer.Ordinal))
@@ -432,6 +485,21 @@ internal static partial class PostalRoomSmoke
         Control stage = Get<Control>(form, "_stage");
         using Bitmap bitmap = new(stage.Width, stage.Height);
         stage.DrawToBitmap(bitmap, stage.ClientRectangle);
+        if (Get<SceneCanvas>(form, "_scene").Visible)
+        {
+            // DrawToBitmap can reverse sibling container order. Composite the game
+            // chrome in its actual z-order so image-filled hotspots cannot cover text.
+            Control[] chrome = [Get<Control>(form, "_sidebar"), Get<Control>(form, "_inventory"),
+                Get<Control>(form, "_roomButton"), Get<Control>(form, "_hintButton"), Get<Control>(form, "_header")];
+            foreach (Control control in chrome.Where(control => control.Visible)
+                .OrderByDescending(control => control.Parent!.Controls.GetChildIndex(control)))
+            {
+                using Bitmap layer = new(control.Width, control.Height);
+                control.DrawToBitmap(layer, control.ClientRectangle);
+                using Graphics graphics = Graphics.FromImage(bitmap);
+                graphics.DrawImageUnscaled(layer, control.Location);
+            }
+        }
         if (Get<Control?>(form, "_confirmationOverlay") is Control overlay)
         {
             // DrawToBitmap can reverse the order of sibling containers. Render the top overlay separately.
@@ -473,7 +541,14 @@ internal static partial class PostalRoomSmoke
 
     private static void Call(GameForm form, string method, params object[] args)
     {
-        typeof(GameForm).GetMethod(method, PrivateInstance)!.Invoke(form, args);
+        MethodInfo target = typeof(GameForm).GetMethod(method, PrivateInstance)!;
+        ParameterInfo[] parameters = target.GetParameters();
+        object?[] invocation = new object?[parameters.Length];
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            invocation[index] = index < args.Length ? args[index] : parameters[index].DefaultValue;
+        }
+        target.Invoke(form, invocation);
         Pump();
     }
 
@@ -502,9 +577,15 @@ internal static partial class PostalRoomSmoke
 
     private sealed class OfflineLeaderboard : ILeaderboardService
     {
+        internal int EntryCount { get; set; }
+        internal int FailedCount { get; set; }
+        internal string NicknamePrefix { get; set; } = "Tester";
+
         public Task<LeaderboardLoadResult> LoadAsync(CancellationToken cancellationToken)
         {
-            return Task.FromResult(new LeaderboardLoadResult([], null));
+            return Task.FromResult(new LeaderboardLoadResult(Enumerable.Range(1, EntryCount)
+                .Select(index => new LeaderboardEntry($"{NicknamePrefix}{index}", index * 1000))
+                .Concat(Enumerable.Range(1, FailedCount).Select(index => new LeaderboardEntry($"Failed{index}", 0, true))).ToArray(), null));
         }
 
         public Task<NicknameReservationResult> ReserveNicknameAsync(string nickname, CancellationToken cancellationToken)

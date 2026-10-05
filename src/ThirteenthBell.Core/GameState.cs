@@ -33,13 +33,50 @@ public sealed class GameState
 
     public const int RequiredPuzzleCount = 6;
 
+    public const int InitialHints = 1;
+    public bool CreatorEasterEggFound { get; private set; }
+
+    public bool TryClaimCreatorHint()
+    {
+        if (CreatorEasterEggFound || ClearFailed)
+        {
+            return false;
+        }
+        CreatorEasterEggFound = true;
+        return true;
+    }
+
+    public const int HintRechargeSeconds = 180;
+
+    public const int MaximumFailedAttempts = 10;
+
+    public bool ClearFailed => FailedAttempts > MaximumFailedAttempts;
+
+    public int AvailableHints(TimeSpan elapsed)
+    {
+        long earned = InitialHints + (CreatorEasterEggFound ? 1 : 0)
+            + Math.Max(0, elapsed.Ticks) / TimeSpan.FromSeconds(HintRechargeSeconds).Ticks;
+        return (int)Math.Clamp(earned - HintCount, 0, int.MaxValue);
+    }
+
+    public bool TryUseHint(TimeSpan elapsed)
+    {
+        if (ClearFailed || AvailableHints(elapsed) == 0)
+        {
+            return false;
+        }
+        RecordHint();
+        return true;
+    }
+
     public bool CanOpenClock => _solvedPuzzles.Count == RequiredPuzzleCount;
 
     public static GameState Restore(
         IEnumerable<PuzzleId> solvedPuzzles,
         int hintCount,
         int failedAttempts,
-        bool clockRestored)
+        bool clockRestored,
+        bool creatorEasterEggFound = false)
     {
         ArgumentNullException.ThrowIfNull(solvedPuzzles);
         ArgumentOutOfRangeException.ThrowIfNegative(hintCount);
@@ -62,6 +99,7 @@ public sealed class GameState
         restored.HintCount = hintCount;
         restored.FailedAttempts = failedAttempts;
         restored.ClockRestored = clockRestored;
+        restored.CreatorEasterEggFound = creatorEasterEggFound;
         return restored;
     }
 
@@ -76,7 +114,10 @@ public sealed class GameState
 
     public void RecordFailure()
     {
-        FailedAttempts++;
+        if (!ClearFailed)
+        {
+            FailedAttempts++;
+        }
     }
 
     public void RecordHint()
@@ -86,9 +127,13 @@ public sealed class GameState
 
     public bool RestoreClock(int hour, int minute, int date)
     {
+        if (ClearFailed)
+        {
+            return false;
+        }
         if (!CanOpenClock || !PuzzleRules.IsClockSettingCorrect(hour, minute, date))
         {
-            FailedAttempts++;
+            RecordFailure();
             return false;
         }
 
@@ -98,7 +143,7 @@ public sealed class GameState
 
     public bool ChooseEnding(EndingChoice choice)
     {
-        if (!ClockRestored || choice == EndingChoice.None || !Enum.IsDefined(choice))
+        if (ClearFailed || !ClockRestored || choice == EndingChoice.None || !Enum.IsDefined(choice))
         {
             return false;
         }
