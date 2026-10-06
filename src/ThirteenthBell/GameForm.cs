@@ -837,9 +837,14 @@ internal sealed partial class GameForm : Form
                 return;
             }
 
+            if (!_actions.ContainsKey("leaderboard_all"))
+            {
+                AddMenuAction("leaderboard_all", "순위 확인", new Rectangle(880, 620, 180, 48), (_, _) => ShowFullLeaderboard(), 5);
+            }
             if (result.Entries.Count == 0)
             {
                 leaderboard.Text = "온라인 순위\n\n아직 등록된 클리어 기록이 없습니다.\n첫 번째 기록의 주인공이 되어 보세요.";
+                ApplyResponsiveLayout();
                 return;
             }
 
@@ -851,10 +856,6 @@ internal sealed partial class GameForm : Form
             }).ToArray();
             AddAlignedTable(leaderboard, "Ranking", RankingHeadings, rows,
                 new Rectangle(24, 55, 452, 210), 75, 225, Theme.Snow, ellipsizeName: true);
-            if (Math.Max(result.TotalCount, result.Entries.Count) > 5 && !_actions.ContainsKey("leaderboard_all"))
-            {
-                AddMenuAction("leaderboard_all", "전체 보기", new Rectangle(880, 620, 180, 48), (_, _) => ShowFullLeaderboard(), 5);
-            }
             ApplyResponsiveLayout();
         }
         catch (OperationCanceledException)

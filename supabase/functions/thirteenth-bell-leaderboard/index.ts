@@ -91,7 +91,7 @@ Deno.serve(async (request: Request) => {
     }
 
     const rawBody = await request.text();
-    if (rawBody.length === 0 || rawBody.length > 4096) {
+    if (rawBody.length === 0 || rawBody.length > 65536) {
       return jsonResponse(400, { error: "invalid_request_body" });
     }
 
@@ -103,7 +103,39 @@ Deno.serve(async (request: Request) => {
     }
 
     if (!isObject(payload)) {
-      return jsonResponse(400, { error: "invalid_request_body" });
+        return jsonResponse(400, { error: "invalid_request_body" });
+    }
+
+    if (payload.action === "delete") {
+      const ids = payload.recordIds;
+      if (!Array.isArray(ids) || ids.length < 1 || ids.length > 1000
+        || !ids.every((id) => typeof id === "string"
+          && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+          && id !== "00000000-0000-0000-0000-000000000000")
+        || typeof payload.password !== "string" || payload.password.length === 0
+        || new TextEncoder().encode(payload.password).length > 72) {
+        return jsonResponse(400, { error: "invalid_deletion" });
+      }
+      const rpc = await callRpc(projectUrl, serviceRoleKey, "thirteenth_bell_delete_records", {
+        p_record_ids: [...new Set(ids.map((id) => id.toLowerCase()))],
+        p_password: payload.password,
+      });
+      if (!rpc.ok || !Array.isArray(rpc.data) || rpc.data.length !== 1 || !isObject(rpc.data[0])) {
+        // Do not log the RPC body or response: they may contain credentials.
+        return jsonResponse(502, { error: "deletion_failed" });
+      }
+      const row = rpc.data[0];
+      if (row.result === "invalid_password") {
+        return jsonResponse(403, { error: "invalid_password" });
+      }
+      if (row.result === "rate_limited") {
+        return jsonResponse(429, { error: "rate_limited" });
+      }
+      if (row.result !== "deleted" || typeof row.deleted_count !== "number"
+        || !Number.isSafeInteger(row.deleted_count) || row.deleted_count < 0 || row.deleted_count > ids.length) {
+        return jsonResponse(502, { error: "invalid_deletion_response" });
+      }
+      return jsonResponse(200, { result: "deleted", deletedCount: row.deleted_count });
     }
 
     if (payload.action === "reserve") {
