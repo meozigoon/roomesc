@@ -7,7 +7,9 @@ using ThirteenthBell.Core;
 
 namespace ThirteenthBell;
 
-internal sealed record LeaderboardEntry(string Nickname, long ClearTimeMilliseconds, bool Failed = false);
+internal sealed record LeaderboardEntry(string Nickname, long ClearTimeMilliseconds, bool Failed = false, Guid? Id = null);
+
+internal sealed record LeaderboardDeleteResult(bool Succeeded, int DeletedCount, string? Error);
 
 internal sealed record LeaderboardLoadResult(IReadOnlyList<LeaderboardEntry> Entries, string? Error, long TotalCount = 0)
 {
@@ -36,6 +38,11 @@ internal interface ILeaderboardService : IDisposable
     }
 
     Task<NicknameReservationResult> ReserveNicknameAsync(string nickname, CancellationToken cancellationToken);
+
+    Task<LeaderboardDeleteResult> DeleteAsync(IReadOnlyList<Guid> recordIds, string password, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new LeaderboardDeleteResult(false, 0, "기록 삭제 서버를 사용할 수 없습니다."));
+    }
 
     Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, CancellationToken cancellationToken);
     Task<ScoreSubmissionResult> SubmitClearAsync(EndingChoice ending, long? elapsedMilliseconds,
@@ -155,7 +162,7 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Uri uri = new(_functionUri.GetLeftPart(UriPartial.Authority)
-                    + "/rest/v1/thirteenth_bell_leaderboard?select=nickname,clear_time_ms,failed&completed_at=not.is.null"
+                    + "/rest/v1/thirteenth_bell_leaderboard?select=id,nickname,clear_time_ms,failed&completed_at=not.is.null"
                     + $"&order=failed.asc,clear_time_ms.asc.nullslast,ranking_penalty.asc,completed_at.asc,nickname.asc&offset={offset}&limit={pageSize}");
                 using HttpRequestMessage request = new(HttpMethod.Get, uri);
                 request.Headers.Add("apikey", _publishableKey);
@@ -195,6 +202,11 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
         List<LeaderboardEntry> entries = [];
         foreach (JsonElement entry in entriesElement.EnumerateArray())
         {
+            Guid? id = entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("id", out JsonElement idElement)
+                && idElement.ValueKind == JsonValueKind.String
+                && Guid.TryParse(idElement.GetString(), out Guid parsedId) && parsedId != Guid.Empty
+                ? parsedId : null;
             if (entry.ValueKind == JsonValueKind.Object
                 && entry.TryGetProperty("failed", out JsonElement failedElement)
                 && failedElement.ValueKind == JsonValueKind.True
@@ -202,7 +214,7 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
                 && failedNickname.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(failedNickname.GetString()))
             {
-                entries.Add(new LeaderboardEntry(failedNickname.GetString()!, 0, true));
+                entries.Add(new LeaderboardEntry(failedNickname.GetString()!, 0, true, id));
                 continue;
             }
             if (entry.ValueKind == JsonValueKind.Object
@@ -214,11 +226,66 @@ internal sealed class SupabaseLeaderboardService : ILeaderboardService
                 && timeElement.TryGetInt64(out long milliseconds)
                 && milliseconds > 0)
             {
-                entries.Add(new LeaderboardEntry(nickname, milliseconds));
+                entries.Add(new LeaderboardEntry(nickname, milliseconds, Id: id));
             }
         }
 
         return entries;
+    }
+
+    public async Task<LeaderboardDeleteResult> DeleteAsync(IReadOnlyList<Guid> recordIds, string password, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recordIds);
+        Guid[] ids = recordIds.Distinct().ToArray();
+        if (ids.Length is < 1 or > 1000 || ids.Contains(Guid.Empty))
+        {
+            return new LeaderboardDeleteResult(false, 0, "삭제할 기록을 1개 이상, 1,000개 이하로 선택하세요.");
+        }
+        if (string.IsNullOrEmpty(password) || Encoding.UTF8.GetByteCount(password) > 72)
+        {
+            return new LeaderboardDeleteResult(false, 0, "삭제 비밀번호를 입력하세요. 비밀번호는 UTF-8 기준 72바이트 이하입니다.");
+        }
+        if (_functionUri is null)
+        {
+            return new LeaderboardDeleteResult(false, 0, _configurationError ?? "기록 삭제 서버를 사용할 수 없습니다.");
+        }
+        try
+        {
+            using HttpRequestMessage request = CreateJsonRequest(new { action = "delete", recordIds = ids, password });
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                string error = response.StatusCode switch
+                {
+                    HttpStatusCode.Forbidden => "삭제 비밀번호가 일치하지 않습니다.",
+                    HttpStatusCode.TooManyRequests => "비밀번호 확인에 여러 번 실패했습니다. 1분 후 다시 시도하세요.",
+                    _ => $"기록을 삭제하지 못했습니다. HTTP {(int)response.StatusCode}. 새로고침 후 기록을 확인하세요."
+                };
+                return new LeaderboardDeleteResult(false, 0, error);
+            }
+            using JsonDocument document = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("result", out JsonElement result) || result.ValueKind != JsonValueKind.String
+                || result.GetString() != "deleted"
+                || !root.TryGetProperty("deletedCount", out JsonElement count) || count.ValueKind != JsonValueKind.Number
+                || !count.TryGetInt32(out int deletedCount)
+                || deletedCount < 0 || deletedCount > ids.Length)
+            {
+                return new LeaderboardDeleteResult(false, 0, "삭제 응답을 확인하지 못했습니다. 새로고침 후 기록을 확인하세요.");
+            }
+            return new LeaderboardDeleteResult(true, deletedCount, null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new LeaderboardDeleteResult(false, 0, "서버 응답 시간이 초과되었습니다. 새로고침 후 삭제 여부를 확인하세요.");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or IOException)
+        {
+            return new LeaderboardDeleteResult(false, 0, "삭제 결과를 확인하지 못했습니다. 새로고침 후 기록을 확인하세요.");
+        }
     }
 
     public async Task<NicknameReservationResult> ReserveNicknameAsync(string nickname, CancellationToken cancellationToken)
